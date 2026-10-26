@@ -1,12 +1,14 @@
 import express, { type ErrorRequestHandler } from 'express';
 import type { Contexto } from './contexto.ts';
 import { rotasDeConsulta } from './rotas/consulta.ts';
+import { rotasDeTelemetria } from './rotas/telemetria.ts';
 
 export function criarApp(ctx: Contexto) {
   const app = express();
   app.use(express.json({ limit: '64kb' }));
 
   app.use('/api', rotasDeConsulta(ctx));
+  app.use('/api', rotasDeTelemetria(ctx));
 
   app.use('/api', (_req, res) => {
     res.status(404).json({ erro: 'Rota não encontrada' });

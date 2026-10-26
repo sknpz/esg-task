@@ -41,6 +41,20 @@ Content-Type: application/json
 | `400`  | Payload inválido                        |
 | `401`  | Token ausente ou desconhecido           |
 
+Leituras **atrasadas** (com `registradoEm` mais antigo que a última leitura recebida, como num dispositivo que
+guardou dados sem sinal e enviou depois) entram no histórico e na trilha, mas não mudam o status nem abrem
+alertas. Leituras com `registradoEm` mais de 5 minutos no futuro são recusadas, e a `precisao` é limitada a
+500 m para que um GPS ruim não "estique" a cerca.
+
+## Eventos em tempo real
+
+O painel recebe as mudanças por Server-Sent Events em `GET /api/eventos`:
+
+| Evento    | Dados                                                    |
+|-----------|----------------------------------------------------------|
+| `bombona` | Estado atual da bombona (posição, status, alertas abertos) |
+| `alerta`  | Alerta aberto ou resolvido                               |
+
 ## Frequência sugerida
 
 Uma bombona passa a maior parte do tempo parada, então não precisa de GPS ligado o tempo todo. Uma

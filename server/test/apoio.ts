@@ -3,6 +3,7 @@ import { criarApp } from '../src/app.ts';
 import { carregarConfig, type Config } from '../src/config.ts';
 import type { Contexto } from '../src/contexto.ts';
 import { abrirBanco } from '../src/db.ts';
+import { criarHubDeEventos } from '../src/eventos.ts';
 import { popularSeVazio } from '../src/seed.ts';
 
 /** Contexto com banco em memória já populado. */
@@ -10,7 +11,7 @@ export function criarContexto(ajustes: Partial<Config> = {}): Contexto {
   const config = { ...carregarConfig(), caminhoBanco: ':memory:', ...ajustes };
   const db = abrirBanco(config.caminhoBanco);
   popularSeVazio(db, config);
-  return { db, config };
+  return { db, config, eventos: criarHubDeEventos() };
 }
 
 /** Sobe a API numa porta livre e devolve a URL base e uma função para encerrar. */
