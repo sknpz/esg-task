@@ -1,0 +1,22 @@
+{
+  "name": "esg-task",
+  "private": true,
+  "description": "Protótipo de rastreamento de bombonas para a Bio Óleo (Cianorte-PR)",
+  "workspaces": [
+    "server",
+    "web",
+    "simulator"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web,sim -c green,cyan,yellow \"npm run dev -w server\" \"npm run dev -w web\" \"npm run start -w simulator\"",
+    "test": "npm test -w server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build -w web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "engines": {
+    "node": ">=23.6"
+  }
+}
