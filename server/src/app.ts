@@ -1,6 +1,8 @@
 import express, { type ErrorRequestHandler } from 'express';
 import type { Contexto } from './contexto.ts';
 import { rotasDeConsulta } from './rotas/consulta.ts';
+import { rotasDeOperacao } from './rotas/operacao.ts';
+import { rotasDeSimulacao } from './rotas/simulacao.ts';
 import { rotasDeTelemetria } from './rotas/telemetria.ts';
 
 export function criarApp(ctx: Contexto) {
@@ -9,6 +11,8 @@ export function criarApp(ctx: Contexto) {
 
   app.use('/api', rotasDeConsulta(ctx));
   app.use('/api', rotasDeTelemetria(ctx));
+  app.use('/api', rotasDeOperacao(ctx));
+  if (ctx.config.simulacaoAtiva) app.use('/api', rotasDeSimulacao(ctx));
 
   app.use('/api', (_req, res) => {
     res.status(404).json({ erro: 'Rota não encontrada' });

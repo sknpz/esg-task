@@ -64,7 +64,9 @@ emprestada, levada por outra empresa de coleta ou simplesmente descartada.
   Classificação: 0 = baixo, 1–2 = médio, 3 ou mais = alto. Serve para a área comercial decidir se mantém o
   cliente ou cobra caução.
 - **RN15 – Resolução manual.** O operador pode resolver qualquer alerta aberto, informando uma observação
-  (ex.: "cliente devolveu, bombona estava no depósito dos fundos").
+  (ex.: "cliente devolveu, bombona estava no depósito dos fundos"). Se a bombona continuar fora da cerca, o
+  alerta reabre na próxima confirmação: resolver não esconde um problema que ainda existe. Na coleta de uma
+  bombona extraviada (recuperação), os alertas de cerca são resolvidos junto.
 - **RN16 – Autenticação do dispositivo.** Leituras só são aceitas com o token do dispositivo. Se o token for
   desconhecido, a resposta é `401`. Se a coordenada ou a bateria forem inválidas, a resposta é `400`.
 
