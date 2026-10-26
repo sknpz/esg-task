@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import express, { type ErrorRequestHandler } from 'express';
 import type { Contexto } from './contexto.ts';
 import { rotasDeConsulta } from './rotas/consulta.ts';
@@ -17,6 +19,13 @@ export function criarApp(ctx: Contexto) {
   app.use('/api', (_req, res) => {
     res.status(404).json({ erro: 'Rota não encontrada' });
   });
+
+  // Em produção, a própria API entrega o painel já compilado (npm run build).
+  const painel = path.join(import.meta.dirname, '..', '..', 'web', 'dist');
+  if (fs.existsSync(painel)) {
+    app.use(express.static(painel));
+    app.get('/{*caminho}', (_req, res) => res.sendFile(path.join(painel, 'index.html')));
+  }
 
   const tratarErro: ErrorRequestHandler = (erro, _req, res, _next) => {
     if (erro?.type === 'entity.parse.failed') return void res.status(400).json({ erro: 'JSON inválido' });

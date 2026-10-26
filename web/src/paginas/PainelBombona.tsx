@@ -3,6 +3,7 @@ import { api, type Bombona, type DetalheBombona } from '../api.ts';
 import { Bateria, SeloAlerta, SeloStatus } from '../componentes/Selos.tsx';
 import { dataHora, distancia, rotuloAlerta, rotuloMovimentacao, tempoRelativo } from '../formato.ts';
 import { useMonitoramento } from '../monitoramento.tsx';
+import { AcoesBombona, SimulacaoBombona } from './AcoesBombona.tsx';
 
 type Props = { codigo: string; aoFechar: () => void };
 
@@ -130,6 +131,16 @@ export function PainelBombona({ codigo, aoFechar }: Props) {
             </ul>
           </div>
         )}
+
+        <div className="bloco">
+          <h3>Operação</h3>
+          <AcoesBombona bombona={b} />
+        </div>
+
+        <div className="bloco bloco--simulacao">
+          <h3>Simulação (demonstração)</h3>
+          <SimulacaoBombona bombona={b} />
+        </div>
 
         <div className="bloco">
           <h3>Linha do tempo</h3>
