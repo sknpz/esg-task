@@ -49,6 +49,21 @@ describe('API de consulta', () => {
     assert.equal((await fetch(`${api.url}/bombonas/BO-9999`)).status, 404);
   });
 
+  it('limita a trilha e ignora limite negativo', async () => {
+    const { id, dispositivo_id } = ctx.db.prepare("SELECT id, dispositivo_id FROM bombonas WHERE codigo = 'BO-0001'").get() as {
+      id: number;
+      dispositivo_id: string;
+    };
+    const ins = ctx.db.prepare(
+      "INSERT INTO leituras (bombona_id, dispositivo_id, lat, lng, bateria, registrado_em) VALUES (?, ?, -23.6, -52.6, 80, ?)",
+    );
+    for (let i = 0; i < 205; i++) ins.run(id, dispositivo_id, new Date(Date.now() - (205 - i) * 1000).toISOString());
+    const trilha = async (q: string) => (await (await fetch(`${api.url}/bombonas/BO-0001/trilha${q}`)).json()).length;
+    assert.equal(await trilha('?limite=3'), 3);
+    assert.equal(await trilha('?limite=-1'), 200);
+    assert.equal(await trilha('?limite=abc'), 200);
+  });
+
   it('classifica o risco dos clientes pelo histórico (RN14)', async () => {
     const clientes = await (await fetch(`${api.url}/clientes`)).json();
     const pastelaria = clientes.find((c: any) => c.nome === 'Pastelaria do Japonês');

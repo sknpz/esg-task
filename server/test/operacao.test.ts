@@ -87,6 +87,23 @@ describe('resolução manual de alertas (RN15)', () => {
     assert.equal((await post(`/alertas/${alerta.id}/resolver`, { observacao: 'de novo' })).status, 409);
     assert.equal((await post('/alertas/99999/resolver', { observacao: 'nada' })).status, 404);
   });
+
+  it('reabre o alerta se continuar fora, sem contar novo incidente para o cliente (RN14)', async () => {
+    const b = await get('/bombonas/BO-0011');
+    const incidentes = async () => (await get('/clientes')).find((c: any) => c.id === b.cliente.id).incidentes;
+    const antes = await incidentes();
+    const fora = { lat: b.localEsperado.lat + 0.005, lng: b.localEsperado.lng };
+    await telemetria('BO-0011', fora);
+    await telemetria('BO-0011', fora);
+    assert.equal(await incidentes(), antes + 1);
+
+    const alerta = (await get('/alertas?status=ABERTO')).find((a: any) => a.bombona === 'BO-0011' && a.tipo === 'FORA_DA_AREA');
+    await post(`/alertas/${alerta.id}/resolver`, { observacao: 'Conferindo com o cliente' });
+    await telemetria('BO-0011', fora);
+    const reaberto = (await get('/alertas?status=ABERTO')).find((a: any) => a.bombona === 'BO-0011' && a.tipo === 'FORA_DA_AREA');
+    assert.ok(reaberto && reaberto.id !== alerta.id);
+    assert.equal(await incidentes(), antes + 1);
+  });
 });
 
 describe('canal de simulação (demo)', () => {

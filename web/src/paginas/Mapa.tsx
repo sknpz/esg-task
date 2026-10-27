@@ -273,9 +273,12 @@ function Enquadrar({ bombona, cliente }: { bombona?: Bombona; cliente?: { lat: n
     map.panInside(posicao, { paddingTopLeft: [60, 60], paddingBottomRight: [paddingDireita, 60] });
   }, [posicao, codigo, map]);
 
+  // A lista de clientes é recarregada a cada evento; só voa quando o cliente focado muda de fato.
+  const clienteLat = cliente?.lat;
+  const clienteLng = cliente?.lng;
   useEffect(() => {
-    if (cliente) map.flyTo(cliente, 16, { duration: 0.8 });
-  }, [cliente, map]);
+    if (clienteLat !== undefined && clienteLng !== undefined) map.flyTo([clienteLat, clienteLng], 16, { duration: 0.8 });
+  }, [clienteLat, clienteLng, map]);
 
   return null;
 }
