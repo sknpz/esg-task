@@ -2,6 +2,8 @@ import { Link, NavLink, Route, Routes } from 'react-router-dom';
 import { Avisos } from './componentes/Avisos.tsx';
 import { Indicadores } from './componentes/Indicadores.tsx';
 import { useMonitoramento } from './monitoramento.tsx';
+import { Alertas } from './paginas/Alertas.tsx';
+import { Clientes } from './paginas/Clientes.tsx';
 import { Mapa } from './paginas/Mapa.tsx';
 
 export function App() {
@@ -38,6 +40,9 @@ export function App() {
       <main className="conteudo">
         <Routes>
           <Route path="/" element={<Mapa />} />
+          <Route path="/alertas" element={<Alertas />} />
+          <Route path="/clientes" element={<Clientes />} />
+          <Route path="*" element={<Mapa />} />
         </Routes>
       </main>
       <Avisos />
