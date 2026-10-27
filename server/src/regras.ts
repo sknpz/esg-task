@@ -110,6 +110,8 @@ export function processarLeitura(ctx: Contexto, dispositivoId: string, leitura: 
               severidade: 'AVISO',
               mensagem: `Saiu da cerca de ${esperado.nome} (${Math.round(distancia)} m do ponto)`,
               em,
+              // Passou da leitura de confirmação: é a mesma saída, reaberta após resolução manual (RN15).
+              reaberto: leiturasFora > LEITURAS_PARA_CONFIRMAR,
             }),
           );
           // RN08: longe demais vira extravio.

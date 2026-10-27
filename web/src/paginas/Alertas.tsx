@@ -12,10 +12,11 @@ export function Alertas() {
   const [aba, setAba] = useState<Aba>('ABERTO');
   const [resolvidos, setResolvidos] = useState<Alerta[] | null>(null);
 
-  // O histórico muda quando algum alerta aberto é resolvido.
+  // O histórico muda quando algum alerta aberto é resolvido (mesmo que outro abra ao mesmo tempo).
+  const idsAbertos = alertasAbertos.map((a) => a.id).join();
   useEffect(() => {
-    if (aba === 'RESOLVIDO') api.alertas('RESOLVIDO').then(setResolvidos);
-  }, [aba, alertasAbertos.length]);
+    if (aba === 'RESOLVIDO') api.alertas('RESOLVIDO').then(setResolvidos).catch(() => {});
+  }, [aba, idsAbertos]);
 
   const linhas = aba === 'ABERTO' ? alertasAbertos : (resolvidos ?? []);
 

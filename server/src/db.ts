@@ -71,7 +71,9 @@ CREATE TABLE IF NOT EXISTS alertas (
   aberto_em     TEXT    NOT NULL,
   resolvido_em  TEXT,
   resolvido_por TEXT,
-  resolucao     TEXT
+  resolucao     TEXT,
+  -- RN14/RN15: reaberto na mesma saída da cerca depois de uma resolução manual; não conta como novo incidente.
+  reaberto      INTEGER NOT NULL DEFAULT 0
 );
 -- RN12: no máximo um alerta aberto por tipo e por bombona.
 CREATE UNIQUE INDEX IF NOT EXISTS alertas_um_aberto ON alertas (bombona_id, tipo) WHERE status = 'ABERTO';
@@ -91,6 +93,9 @@ export function abrirBanco(caminho: string): Banco {
   const db = new DatabaseSync(caminho);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   db.exec(ESQUEMA);
+  // Bancos criados antes da coluna `reaberto`.
+  const colunas = db.prepare('PRAGMA table_info(alertas)').all() as Array<{ name: string }>;
+  if (!colunas.some((c) => c.name === 'reaberto')) db.exec('ALTER TABLE alertas ADD COLUMN reaberto INTEGER NOT NULL DEFAULT 0');
   return db;
 }
 

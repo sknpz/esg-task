@@ -7,14 +7,22 @@ export type Severidade = 'INFO' | 'AVISO' | 'CRITICO';
 /** Abre um alerta se ainda não houver um aberto do mesmo tipo (RN12). Devolve o alerta criado ou `null`. */
 export function abrirAlerta(
   db: Banco,
-  alerta: { bombonaId: number; clienteId: number | null; tipo: TipoAlerta; severidade: Severidade; mensagem: string; em: string },
+  alerta: {
+    bombonaId: number;
+    clienteId: number | null;
+    tipo: TipoAlerta;
+    severidade: Severidade;
+    mensagem: string;
+    em: string;
+    reaberto?: boolean;
+  },
 ) {
   const { changes, lastInsertRowid } = db
     .prepare(
-      `INSERT OR IGNORE INTO alertas (bombona_id, cliente_id, tipo, severidade, mensagem, aberto_em)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT OR IGNORE INTO alertas (bombona_id, cliente_id, tipo, severidade, mensagem, aberto_em, reaberto)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(alerta.bombonaId, alerta.clienteId, alerta.tipo, alerta.severidade, alerta.mensagem, alerta.em);
+    .run(alerta.bombonaId, alerta.clienteId, alerta.tipo, alerta.severidade, alerta.mensagem, alerta.em, Number(alerta.reaberto ?? false));
   return changes > 0 ? alertaPorId(db, Number(lastInsertRowid)) : null;
 }
 

@@ -143,8 +143,8 @@ export function listarClientes(db: Banco) {
     .prepare(
       `SELECT c.id, c.nome, c.tipo, c.cidade, c.endereco, c.lat, c.lng, c.raio_m AS raioM,
               (SELECT COUNT(*) FROM bombonas b WHERE b.cliente_id = c.id AND b.status IN ('EM_CLIENTE', 'EXTRAVIADA')) AS bombonas,
-              (SELECT COUNT(*) FROM alertas a WHERE a.cliente_id = c.id AND a.tipo = 'FORA_DA_AREA') AS incidentes,
-              (SELECT MAX(a.aberto_em) FROM alertas a WHERE a.cliente_id = c.id AND a.tipo = 'FORA_DA_AREA') AS ultimoIncidente
+              (SELECT COUNT(*) FROM alertas a WHERE a.cliente_id = c.id AND a.tipo = 'FORA_DA_AREA' AND a.reaberto = 0) AS incidentes,
+              (SELECT MAX(a.aberto_em) FROM alertas a WHERE a.cliente_id = c.id AND a.tipo = 'FORA_DA_AREA' AND a.reaberto = 0) AS ultimoIncidente
        FROM clientes c ORDER BY incidentes DESC, c.nome`,
     )
     .all() as Array<{ incidentes: number }>;

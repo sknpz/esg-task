@@ -16,8 +16,9 @@ const DURACAO_MS = 1200;
 /** Marcador que desliza até a nova posição, como o entregador no app de delivery. */
 export function MarcadorAnimado({ posicao, icone, zIndexOffset, aoClicar, children }: Props) {
   const ref = useRef<L.Marker>(null);
-  // O Marker só usa a posição inicial; as seguintes são animadas aqui.
-  const inicial = useRef(posicao);
+  // O Marker só usa a posição inicial; as seguintes são animadas aqui. O array precisa ser sempre o
+  // mesmo: o react-leaflet chama setLatLng quando a referência muda e devolveria o pino ao início.
+  const inicial = useRef<[number, number]>([posicao.lat, posicao.lng]);
 
   useEffect(() => {
     const marcador = ref.current;
@@ -39,7 +40,7 @@ export function MarcadorAnimado({ posicao, icone, zIndexOffset, aoClicar, childr
   return (
     <Marker
       ref={ref}
-      position={[inicial.current.lat, inicial.current.lng]}
+      position={inicial.current}
       icon={icone}
       zIndexOffset={zIndexOffset}
       eventHandlers={aoClicar ? { click: aoClicar } : undefined}

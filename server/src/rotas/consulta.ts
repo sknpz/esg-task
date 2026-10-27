@@ -44,7 +44,9 @@ export function rotasDeConsulta({ db, config }: Contexto) {
   r.get('/bombonas/:codigo/trilha', (req, res) => {
     const linha = linhaBombonaPorCodigo(db, req.params.codigo);
     if (!linha) return void res.status(404).json({ erro: 'Bombona não encontrada' });
-    const limite = Math.min(Number(req.query.limite) || 200, 2000);
+    // LIMIT negativo no SQLite significa "sem limite": valor inválido cai no padrão.
+    const pedido = Math.trunc(Number(req.query.limite));
+    const limite = pedido > 0 ? Math.min(pedido, 2000) : 200;
     res.json(trilha(db, linha.id, limite));
   });
 
