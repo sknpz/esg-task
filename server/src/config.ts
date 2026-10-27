@@ -16,6 +16,7 @@ export type Config = {
   bateriaMinima: number;
   bateriaRecuperada: number;
   tokenSimulador: string;
+  simulacaoAtiva: boolean;
 };
 
 export function carregarConfig(): Config {
@@ -35,5 +36,7 @@ export function carregarConfig(): Config {
     bateriaMinima: num('BATERIA_MINIMA', 20),
     bateriaRecuperada: num('BATERIA_RECUPERADA', 30),
     tokenSimulador: process.env.SIM_TOKEN ?? 'sim-demo-token',
+    // Canal de controle da demonstração; desligue com SIMULACAO=off.
+    simulacaoAtiva: process.env.SIMULACAO !== 'off',
   };
 }
