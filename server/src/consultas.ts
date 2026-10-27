@@ -60,7 +60,8 @@ const localDoPatio = (config: Config): Local => ({
 export function localEsperado(b: LinhaBombona, config: Config): Local | null {
   if (b.status === 'PATIO') return localDoPatio(config);
   if (b.status === 'EM_ROTA') return null;
-  return localDoCliente(b);
+  // EM_CLIENTE sempre tem cliente; EXTRAVIADA pode ter saído do pátio.
+  return localDoCliente(b) ?? localDoPatio(config);
 }
 
 /** Para onde a bombona em rota está indo. */
