@@ -60,8 +60,9 @@ emprestada, levada por outra empresa de coleta ou simplesmente descartada.
 - **RN12 – Um alerta aberto por tipo.** Uma bombona não pode ter dois alertas abertos do mesmo tipo.
 - **RN13 – Bombona em rota não gera alerta de cerca.** Durante o transporte não existe local esperado.
 - **RN14 – Risco do cliente.** O cliente acumula um histórico de incidentes, que é a quantidade de alertas
-  `FORA_DA_AREA` ou `EXTRAVIO` ligados a ele. Classificação: 0 = baixo, 1–2 = médio, 3 ou mais = alto. Serve
-  para a área comercial decidir se mantém o cliente ou cobra caução.
+  `FORA_DA_AREA` ligados a ele. Cada saída da cerca conta uma vez, mesmo que depois vire extravio.
+  Classificação: 0 = baixo, 1–2 = médio, 3 ou mais = alto. Serve para a área comercial decidir se mantém o
+  cliente ou cobra caução.
 - **RN15 – Resolução manual.** O operador pode resolver qualquer alerta aberto, informando uma observação
   (ex.: "cliente devolveu, bombona estava no depósito dos fundos").
 - **RN16 – Autenticação do dispositivo.** Leituras só são aceitas com o token do dispositivo. Se o token for
