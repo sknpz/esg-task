@@ -8,6 +8,7 @@ import { MarcadorAnimado } from '../componentes/MarcadorAnimado.tsx';
 import { Bateria, SeloAlerta, SeloStatus } from '../componentes/Selos.tsx';
 import { distancia, rotuloStatus, tempoRelativo } from '../formato.ts';
 import { useMonitoramento } from '../monitoramento.tsx';
+import { textoCurtoPrevisao, useViagens, type Viagem } from '../viagens.ts';
 import { PainelBombona } from './PainelBombona.tsx';
 
 type Filtro = Status | 'ALERTA' | null;
@@ -34,6 +35,7 @@ export function Mapa() {
   const clienteFocado = Number(params.get('c')) || null;
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<Filtro>(null);
+  const viagens = useViagens(bombonas);
 
   const todas = useMemo(() => Object.values(bombonas), [bombonas]);
   const contagem = useMemo(() => {
@@ -100,10 +102,12 @@ export function Mapa() {
                 </span>
                 <span className="item__onde">
                   {b.status === 'EM_ROTA'
-                    ? `→ ${b.destino?.nome} · faltam ${distancia(b.distanciaM)}`
+                    ? `→ ${b.destino?.nome} · ${[distancia(viagens[b.codigo]?.restanteM ?? b.distanciaM), viagens[b.codigo] && textoCurtoPrevisao(viagens[b.codigo], agora)].filter(Boolean).join(' · ')}`
                     : b.status === 'PATIO'
                       ? 'Pátio Bio Óleo'
-                      : `${b.cliente?.nome} · ${b.cliente?.cidade}`}
+                      : b.cliente
+                        ? `${b.cliente.nome} · ${b.cliente.cidade}`
+                        : `Fora do ${b.localEsperado?.nome ?? 'local esperado'}`}
                 </span>
                 <span className="item__linha item__linha--meta">
                   <Bateria nivel={b.bateria} />
@@ -169,7 +173,7 @@ export function Mapa() {
               />
             ))}
 
-          {selecionada && bombonas[selecionada] && <Trilha bombona={bombonas[selecionada]} />}
+          {selecionada && bombonas[selecionada] && <Trilha bombona={bombonas[selecionada]} viagem={viagens[selecionada]} />}
 
           {todas
             .filter((b) => b.posicao)
@@ -193,7 +197,7 @@ export function Mapa() {
 
         <Legenda />
         {selecionada && bombonas[selecionada] && (
-          <PainelBombona key={selecionada} codigo={selecionada} aoFechar={() => selecionar(null)} />
+          <PainelBombona key={selecionada} codigo={selecionada} viagem={viagens[selecionada]} aoFechar={() => selecionar(null)} />
         )}
       </div>
     </div>
@@ -201,7 +205,7 @@ export function Mapa() {
 }
 
 /** Caminho percorrido pela bombona selecionada, atualizado ao vivo. */
-function Trilha({ bombona }: { bombona: Bombona }) {
+function Trilha({ bombona, viagem }: { bombona: Bombona; viagem?: Viagem }) {
   const [pontos, setPontos] = useState<Ponto[]>([]);
 
   useEffect(() => {
@@ -221,7 +225,6 @@ function Trilha({ bombona }: { bombona: Bombona }) {
     });
   }, [bombona.posicao]);
 
-  const referencia = referenciaDe(bombona);
   return (
     <>
       {pontos.length > 1 && (
@@ -231,11 +234,16 @@ function Trilha({ bombona }: { bombona: Bombona }) {
           <CircleMarker center={pontos[0]} radius={4} pathOptions={{ className: 'trilha-inicio' }} />
         </>
       )}
-      {bombona.posicao && referencia && bombona.status === 'EM_ROTA' && (
-        <Polyline positions={[bombona.posicao, referencia]} pathOptions={{ className: 'linha-destino' }} />
-      )}
+      {/* Em viagem, o caminho que falta pelas ruas. */}
+      {viagem && <Polyline positions={viagem.caminho} pathOptions={{ className: 'linha-destino' }} />}
     </>
   );
+}
+
+/** Quanto do mapa o painel cobre: a direita no desktop, a parte de baixo no celular (gaveta). */
+function areaDoPainel() {
+  if (window.innerWidth > 900) return { direita: LARGURA_PAINEL + 32, baixo: 0 };
+  return { direita: 0, baixo: document.querySelector<HTMLElement>('.painel')?.offsetHeight ?? 0 };
 }
 
 /** Ajusta o mapa quando o operador escolhe uma bombona ou um cliente. */
@@ -243,34 +251,44 @@ function Enquadrar({ bombona, cliente }: { bombona?: Bombona; cliente?: { lat: n
   const map = useMap();
   const codigo = bombona?.codigo;
   const ultimo = useRef<string | null>(null);
+  const seguindo = useRef<string | null>(null);
+  const voandoAte = useRef(0);
 
   useEffect(() => {
     if (!bombona?.posicao || ultimo.current === codigo) return;
     ultimo.current = codigo ?? null;
+    const posicao = L.latLng(bombona.posicao);
     const referencia = referenciaDe(bombona);
-    const paddingDireita = window.innerWidth > 900 ? LARGURA_PAINEL + 32 : 24;
+    const { direita, baixo } = areaDoPainel();
+    let zoom = Math.max(map.getZoom(), 16);
     if (referencia && (bombona.distanciaM ?? 0) > 200) {
-      map.fitBounds(L.latLngBounds([bombona.posicao, referencia]), {
-        paddingTopLeft: [40, 40],
-        paddingBottomRight: [paddingDireita, 40],
-        maxZoom: 16,
-      });
-    } else {
-      map.flyTo(bombona.posicao, Math.max(map.getZoom(), 16), { duration: 0.8 });
+      // A bombona fica no centro; o zoom é o que ainda mostra a referência (cliente ou destino).
+      const espelho = L.latLng(2 * posicao.lat - referencia.lat, 2 * posicao.lng - referencia.lng);
+      zoom = Math.min(16, map.getBoundsZoom(L.latLngBounds([referencia, espelho]), false, L.point(direita + 80, baixo + 80)));
     }
+    // O painel cobre parte do mapa: desloca o centro para a bombona ficar no meio da área livre.
+    const centro = map.unproject(map.project(posicao, zoom).add([direita / 2, baixo / 2]), zoom);
+    map.flyTo(centro, zoom, { duration: 0.8 });
+    voandoAte.current = Date.now() + 900;
     // Só reenquadra ao trocar de bombona, não a cada leitura.
   }, [codigo, Boolean(bombona?.posicao)]);
 
   useEffect(() => {
-    if (!codigo) ultimo.current = null;
+    if (!codigo) ultimo.current = seguindo.current = null;
   }, [codigo]);
 
   // Segue a bombona selecionada quando ela sai da área visível.
   const posicao = bombona?.posicao;
   useEffect(() => {
     if (!posicao || ultimo.current !== codigo) return;
-    const paddingDireita = window.innerWidth > 900 ? LARGURA_PAINEL + 32 : 24;
-    map.panInside(posicao, { paddingTopLeft: [60, 60], paddingBottomRight: [paddingDireita, 60] });
+    // A primeira posição já foi tratada pelo enquadramento acima; um pan durante o voo o cancelaria.
+    if (seguindo.current !== codigo) {
+      seguindo.current = codigo ?? null;
+      return;
+    }
+    if (Date.now() < voandoAte.current) return;
+    const { direita, baixo } = areaDoPainel();
+    map.panInside(posicao, { paddingTopLeft: [60, 60], paddingBottomRight: [direita + 24, baixo + 60] });
   }, [posicao, codigo, map]);
 
   // A lista de clientes é recarregada a cada evento; só voa quando o cliente focado muda de fato.

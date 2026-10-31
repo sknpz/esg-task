@@ -56,7 +56,8 @@ emprestada, levada por outra empresa de coleta ou simplesmente descartada.
 - **RN10 – Sem sinal.** Se um dispositivo não envia leitura há mais de **6 h** (na demonstração: 45 s), é
   aberto o alerta `SEM_SINAL`. Esse alerta se resolve sozinho quando o sinal volta.
 - **RN11 – Bateria baixa.** Uma leitura com bateria abaixo de **20%** abre o alerta `BATERIA_BAIXA`. Ele se
-  resolve sozinho quando a bateria passa de 30%, depois da troca ou recarga.
+  resolve sozinho quando a bateria passa de 30%, depois da troca ou recarga. O rastreador é recarregado sempre
+  que a bombona volta ao pátio.
 - **RN12 – Um alerta aberto por tipo.** Uma bombona não pode ter dois alertas abertos do mesmo tipo.
 - **RN13 – Bombona em rota não gera alerta de cerca.** Durante o transporte não existe local esperado.
 - **RN14 – Risco do cliente.** O cliente acumula um histórico de incidentes, que é a quantidade de alertas

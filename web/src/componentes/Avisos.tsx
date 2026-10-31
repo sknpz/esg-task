@@ -1,28 +1,25 @@
 import { useNavigate } from 'react-router-dom';
-import { rotuloAlerta } from '../formato.ts';
 import { useMonitoramento } from '../monitoramento.tsx';
 
-/** Notificações de alertas novos que chegam em tempo real. */
+/** Notificações em tempo real: alertas novos e etapas concluídas. */
 export function Avisos() {
   const { avisos, dispensarAviso } = useMonitoramento();
   const navegar = useNavigate();
   return (
     <div className="avisos" aria-live="polite">
-      {avisos.map(({ id, alerta }) => (
-        <div key={id} className={`aviso aviso--${alerta.severidade}`} role="status">
+      {avisos.map((aviso) => (
+        <div key={aviso.id} className={`aviso aviso--${aviso.tom}`} role="status">
           <button
             className="aviso__conteudo"
             onClick={() => {
-              navegar(`/?b=${alerta.bombona}`);
-              dispensarAviso(id);
+              navegar(`/?b=${aviso.bombona}`);
+              dispensarAviso(aviso.id);
             }}
           >
-            <strong>
-              {rotuloAlerta[alerta.tipo]} · {alerta.bombona}
-            </strong>
-            <span>{alerta.mensagem}</span>
+            <strong>{aviso.titulo}</strong>
+            <span>{aviso.texto}</span>
           </button>
-          <button className="botao-icone" onClick={() => dispensarAviso(id)} aria-label="Dispensar">
+          <button className="botao-icone" onClick={() => dispensarAviso(aviso.id)} aria-label="Dispensar">
             ×
           </button>
         </div>
