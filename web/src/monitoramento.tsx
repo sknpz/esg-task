@@ -1,7 +1,24 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, type Alerta, type Bombona, type Cliente, type Configuracao, type Indicadores } from './api.ts';
+import { rotuloAlerta } from './formato.ts';
 
-export type Aviso = { id: number; alerta: Alerta };
+/** Notificação na tela: alerta novo ou etapa concluída (como o push "pedido entregue"). */
+export type Aviso = { id: string; tom: 'CRITICO' | 'AVISO' | 'ETAPA'; titulo: string; texto: string; bombona: string };
+
+/** Etapas que acontecem sozinhas (pela leitura do rastreador) e merecem aviso. As do operador ele já viu. */
+function etapaConcluida(antes: Bombona | undefined, depois: Bombona) {
+  if (!antes) return null;
+  if (antes.status === 'EM_ROTA' && depois.status === 'EM_CLIENTE') {
+    return { titulo: `Entregue · ${depois.codigo}`, texto: `Chegou em ${depois.cliente?.nome}.` };
+  }
+  if (antes.status === 'EM_ROTA' && depois.status === 'PATIO') {
+    return { titulo: `Chegou ao pátio · ${depois.codigo}`, texto: 'Disponível para a próxima entrega.' };
+  }
+  if (antes.status === 'PATIO' && depois.status === 'PATIO' && (antes.bateria ?? 100) < 90 && (depois.bateria ?? 0) >= 99) {
+    return { titulo: `Rastreador recarregado · ${depois.codigo}`, texto: `Bateria de ${Math.round(antes.bateria!)}% para ${Math.round(depois.bateria!)}%.` };
+  }
+  return null;
+}
 
 type Monitoramento = {
   carregado: boolean;
@@ -13,7 +30,7 @@ type Monitoramento = {
   indicadores: Indicadores | null;
   avisos: Aviso[];
   agora: number;
-  dispensarAviso: (id: number) => void;
+  dispensarAviso: (id: string) => void;
   atualizarBombona: (b: Bombona) => void;
   recarregar: () => void;
 };
@@ -47,6 +64,14 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
   const [agora, setAgora] = useState(Date.now());
 
   const atualizarBombona = useCallback((b: Bombona) => setBombonas((atual) => ({ ...atual, [b.codigo]: b })), []);
+  // Cópia para o ouvinte de eventos comparar o antes e o depois sem se reinscrever a cada mudança.
+  const bombonasRef = useRef(bombonas);
+  bombonasRef.current = bombonas;
+
+  const mostrarAviso = useCallback((aviso: Aviso) => {
+    setAvisos((atual) => [...atual.slice(-3), aviso]);
+    window.setTimeout(() => setAvisos((atual) => atual.filter((a) => a.id !== aviso.id)), 9000);
+  }, []);
 
   const recarregarResumo = useCallback(() => {
     api.indicadores().then(setIndicadores).catch(() => {});
@@ -80,21 +105,29 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
     };
     fonte.onerror = () => setConectado(false);
     fonte.addEventListener('bombona', (e) => {
-      atualizarBombona(JSON.parse((e as MessageEvent).data));
+      const bombona: Bombona = JSON.parse((e as MessageEvent).data);
+      const etapa = etapaConcluida(bombonasRef.current[bombona.codigo], bombona);
+      if (etapa) mostrarAviso({ id: `etapa-${bombona.codigo}-${Date.now()}`, tom: 'ETAPA', bombona: bombona.codigo, ...etapa });
+      atualizarBombona(bombona);
       recarregarResumoAgrupado();
     });
     fonte.addEventListener('alerta', (e) => {
       const alerta: Alerta = JSON.parse((e as MessageEvent).data);
       recarregarResumoAgrupado();
       if (alerta.status === 'ABERTO' && alerta.severidade !== 'INFO') {
-        setAvisos((atual) => [...atual.slice(-3), { id: alerta.id, alerta }]);
-        window.setTimeout(() => setAvisos((atual) => atual.filter((a) => a.id !== alerta.id)), 9000);
+        mostrarAviso({
+          id: `alerta-${alerta.id}`,
+          tom: alerta.severidade,
+          titulo: `${rotuloAlerta[alerta.tipo]} · ${alerta.bombona}`,
+          texto: alerta.mensagem,
+          bombona: alerta.bombona,
+        });
       }
     });
     return () => fonte.close();
-  }, [atualizarBombona, recarregar, recarregarResumoAgrupado]);
+  }, [atualizarBombona, recarregar, recarregarResumoAgrupado, mostrarAviso]);
 
-  const dispensarAviso = useCallback((id: number) => setAvisos((atual) => atual.filter((a) => a.id !== id)), []);
+  const dispensarAviso = useCallback((id: string) => setAvisos((atual) => atual.filter((a) => a.id !== id)), []);
 
   const valor = useMemo(
     () => ({

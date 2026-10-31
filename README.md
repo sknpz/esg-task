@@ -89,7 +89,7 @@ As variáveis de ambiente (tempo de sem sinal, distância de extravio etc.) est�
 
 | Tela         | O que mostra                                                                                     |
 |--------------|---------------------------------------------------------------------------------------------------|
-| **Mapa**     | Bombonas por status, cercas, trilha da selecionada, indicadores e avisos ao vivo. O painel lateral tem a situação, a operação (entrega, coleta, recuperação), os controles da simulação e a linha do tempo |
+| **Mapa**     | Bombonas por status, cercas, trilha da selecionada, indicadores e avisos ao vivo (alertas e etapas: entregue, chegou ao pátio, recarregada). Em rota: caminho que falta pelas ruas e previsão de chegada. O painel lateral (no celular, uma gaveta que abre e recolhe) tem a situação, as etapas do ciclo, a operação (entrega, coleta, recuperação), os controles da simulação e a linha do tempo |
 | **Alertas**  | Abertos e histórico, com resolução manual e observação                                            |
 | **Clientes** | Ranking de risco pelo histórico de incidentes                                                     |
 

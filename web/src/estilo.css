@@ -553,6 +553,11 @@ p {
 
 /* camadas vetoriais */
 
+/* Clicar numa cerca dá foco ao <path> e o Chrome desenha o contorno retangular em volta dele. */
+path.leaflet-interactive:focus {
+  outline: none;
+}
+
 .cerca {
   stroke: var(--verde);
   stroke-width: 1.5;
@@ -797,6 +802,76 @@ p {
   animation: pulso-vermelho 1.4s infinite;
 }
 
+.situacao__previsao {
+  font-weight: 600;
+  color: var(--azul) !important;
+}
+
+/* etapas do ciclo (barra de progresso do pedido) */
+
+.etapas {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.etapa {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.etapa__barra {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--borda);
+}
+
+.etapa__rotulo {
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--texto-suave);
+}
+
+.etapa__quando {
+  font-size: 11px;
+  color: var(--texto-suave);
+}
+
+.etapa--feita .etapa__barra {
+  background: var(--verde);
+}
+
+.etapa--atual .etapa__barra {
+  background: var(--azul);
+}
+
+.etapa--atual .etapa__rotulo,
+.etapa--critica .etapa__rotulo {
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.etapa--critica .etapa__barra {
+  background: var(--vermelho);
+}
+
+.etapa--critica .etapa__quando {
+  color: var(--vermelho);
+}
+
+.painel__alca {
+  display: none;
+}
+
+.painel__detalhes {
+  margin-top: 4px;
+}
+
 .fatos {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -945,6 +1020,10 @@ p {
   border-left-color: var(--vermelho);
 }
 
+.aviso--ETAPA {
+  border-left-color: var(--verde);
+}
+
 .aviso__conteudo {
   flex: 1;
   display: flex;
@@ -1073,14 +1152,51 @@ p {
     overflow: visible;
   }
 
+  /* Gaveta (bottom sheet): recolhida mostra só o resumo; expandida, tudo. */
   .painel {
     top: auto;
-    left: 8px;
-    right: 8px;
-    bottom: 8px;
+    left: 0;
+    right: 0;
+    bottom: 0;
     width: auto;
     max-width: none;
-    max-height: 70%;
+    max-height: 85%;
+    border-radius: 16px 16px 0 0;
+    transition: max-height 0.2s ease-out;
+  }
+
+  .painel:not(.painel--expandido) .painel__detalhes {
+    display: none;
+  }
+
+  .painel__alca {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex: none;
+    width: 100%;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .painel__alca::before {
+    content: '';
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--borda);
+  }
+
+  .painel__topo {
+    padding-top: 0;
+  }
+
+  .painel__corpo {
+    padding-top: 12px;
   }
 }
 
