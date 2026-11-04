@@ -451,10 +451,6 @@ p {
   color: var(--texto-suave);
 }
 
-.item__sinal {
-  font-size: 12px;
-}
-
 .item__alertas {
   display: flex;
   flex-wrap: wrap;
@@ -611,17 +607,6 @@ path.leaflet-interactive:focus {
   fill-opacity: 1;
 }
 
-.linha-desvio {
-  stroke: var(--ambar);
-  stroke-width: 2;
-  stroke-dasharray: 6 6;
-  fill: none;
-}
-
-.linha-desvio--critico {
-  stroke: var(--vermelho);
-}
-
 .linha-destino {
   stroke: var(--azul);
   stroke-width: 2;
@@ -629,6 +614,33 @@ path.leaflet-interactive:focus {
   stroke-linecap: round;
   stroke-opacity: 0.8;
   fill: none;
+}
+
+.centralizar {
+  position: absolute;
+  top: 84px;
+  left: 10px;
+  z-index: 500;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 2px solid rgb(0 0 0 / 20%);
+  border-radius: 4px;
+  background: #fff;
+  background-clip: padding-box;
+  color: var(--azul);
+  cursor: pointer;
+}
+
+.centralizar:hover {
+  background-color: #f4f4f4;
+}
+
+.centralizar svg {
+  width: 20px;
+  height: 20px;
 }
 
 .legenda {

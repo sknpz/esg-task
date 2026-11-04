@@ -123,10 +123,6 @@ export function PainelBombona({ codigo, viagem, aoFechar }: Props) {
               </dd>
             </div>
             <div>
-              <dt>Último sinal</dt>
-              <dd className={b.alertasAbertos.includes('SEM_SINAL') ? 'texto-alerta' : ''}>{tempoRelativo(b.ultimoSinal, agora)}</dd>
-            </div>
-            <div>
               <dt>Rastreador</dt>
               <dd>{b.dispositivoId}</dd>
             </div>

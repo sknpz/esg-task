@@ -4,7 +4,7 @@ import { buscarRota, comprimento, trechoRestante } from './rota.ts';
 
 /** Acompanhamento de uma bombona em rota, como a previsão de chegada do delivery. */
 export type Viagem = {
-  /** Caminho pelas ruas que ainda falta (ou a linha reta, se o serviço de rotas não respondeu). */
+  /** Caminho pelas ruas que ainda falta. Vazio enquanto o serviço de rotas não responde: nunca desenha linha reta. */
   caminho: Ponto[];
   restanteM: number;
   /** Instante previsto de chegada (ms). null enquanto não há leituras suficientes ou se está parada. */
@@ -33,9 +33,10 @@ export function textoCurtoPrevisao(v: Viagem, agora: number) {
 type Amostra = { t: number; restanteM: number };
 
 /** Leituras usadas para estimar a velocidade (as mais recentes). */
-const AMOSTRAS = 6;
+const AMOSTRAS = 24;
 /** Abaixo disso (m/s) a bombona é considerada parada. */
 const VELOCIDADE_MINIMA = 0.5;
+const ESPERA_NOVA_ROTA_MS = 3000;
 
 const destinoDe = (b: Bombona) => b.destino ?? b.localEsperado;
 const chaveDe = (b: Bombona) => {
@@ -58,7 +59,11 @@ export function useViagens(bombonas: Record<string, Bombona>): Record<string, Vi
       const chave = chaveDe(b)!;
       if (pedidas.current.has(chave)) continue;
       pedidas.current.add(chave);
-      buscarRota(b.posicao!, destinoDe(b)!).then((rota) => setRotas((atual) => ({ ...atual, [chave]: rota })));
+      buscarRota(b.posicao!, destinoDe(b)!).then((rota) => {
+        setRotas((atual) => ({ ...atual, [chave]: rota }));
+        // Sem resposta do serviço: libera para tentar de novo em vez de ficar na linha reta até o fim.
+        if (!rota) window.setTimeout(() => pedidas.current.delete(chave), ESPERA_NOVA_ROTA_MS);
+      });
     }
   }, [emRota]);
 
@@ -67,8 +72,8 @@ export function useViagens(bombonas: Record<string, Bombona>): Record<string, Vi
     for (const b of emRota) {
       const chave = chaveDe(b)!;
       const rota = rotas[chave];
-      const caminho = rota ? trechoRestante(rota, b.posicao!) : [b.posicao!, destinoDe(b)!];
-      const restanteM = comprimento(caminho);
+      const caminho = rota ? trechoRestante(rota, b.posicao!) : [];
+      const restanteM = comprimento(rota ? caminho : [b.posicao!, destinoDe(b)!]);
 
       // Uma amostra por leitura. Trocar de destino, ou a rota chegar depois da linha reta, recomeça a conta:
       // misturar as duas medidas faria a distância "crescer" e a bombona parecer parada.

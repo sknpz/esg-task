@@ -43,12 +43,18 @@ export function useMonitoramento() {
   return ctx;
 }
 
-/** Junta várias chamadas seguidas numa só (ex.: rajada de eventos). */
+/**
+ * Junta várias chamadas seguidas numa só, no máximo uma a cada `ms`. O prazo não recomeça a cada chamada:
+ * com leituras chegando sem parar, a função nunca rodaria e os indicadores ficariam congelados.
+ */
 function useAgrupado(fn: () => void, ms: number) {
   const timer = useRef<number | undefined>(undefined);
   return useCallback(() => {
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(fn, ms);
+    if (timer.current !== undefined) return;
+    timer.current = window.setTimeout(() => {
+      timer.current = undefined;
+      fn();
+    }, ms);
   }, [fn, ms]);
 }
 
@@ -80,6 +86,15 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
   }, []);
   const recarregarResumoAgrupado = useAgrupado(recarregarResumo, 400);
 
+  // As leituras chegam dezenas de vezes por segundo: um único redesenho por lote, não um por leitura.
+  const pendentes = useRef<Record<string, Bombona>>({});
+  const aplicarPendentes = useCallback(() => {
+    const lote = pendentes.current;
+    pendentes.current = {};
+    setBombonas((atual) => ({ ...atual, ...lote }));
+  }, []);
+  const aplicarPendentesAgrupado = useAgrupado(aplicarPendentes, 100);
+
   const recarregar = useCallback(async () => {
     const [cfg, lista] = await Promise.all([api.configuracao(), api.bombonas()]);
     setConfig(cfg);
@@ -106,9 +121,10 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
     fonte.onerror = () => setConectado(false);
     fonte.addEventListener('bombona', (e) => {
       const bombona: Bombona = JSON.parse((e as MessageEvent).data);
-      const etapa = etapaConcluida(bombonasRef.current[bombona.codigo], bombona);
+      const etapa = etapaConcluida(pendentes.current[bombona.codigo] ?? bombonasRef.current[bombona.codigo], bombona);
       if (etapa) mostrarAviso({ id: `etapa-${bombona.codigo}-${Date.now()}`, tom: 'ETAPA', bombona: bombona.codigo, ...etapa });
-      atualizarBombona(bombona);
+      pendentes.current[bombona.codigo] = bombona;
+      aplicarPendentesAgrupado();
       recarregarResumoAgrupado();
     });
     fonte.addEventListener('alerta', (e) => {
@@ -125,7 +141,7 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
       }
     });
     return () => fonte.close();
-  }, [atualizarBombona, recarregar, recarregarResumoAgrupado, mostrarAviso]);
+  }, [aplicarPendentesAgrupado, recarregar, recarregarResumoAgrupado, mostrarAviso]);
 
   const dispensarAviso = useCallback((id: string) => setAvisos((atual) => atual.filter((a) => a.id !== id)), []);
 

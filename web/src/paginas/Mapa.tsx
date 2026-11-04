@@ -6,7 +6,7 @@ import { api, type Bombona, type Ponto, type Status } from '../api.ts';
 import { destaqueDe, iconeBombona, iconePatio } from '../componentes/icones.ts';
 import { MarcadorAnimado } from '../componentes/MarcadorAnimado.tsx';
 import { Bateria, SeloAlerta, SeloStatus } from '../componentes/Selos.tsx';
-import { distancia, rotuloStatus, tempoRelativo } from '../formato.ts';
+import { distancia, rotuloStatus } from '../formato.ts';
 import { useMonitoramento } from '../monitoramento.tsx';
 import { textoCurtoPrevisao, useViagens, type Viagem } from '../viagens.ts';
 import { PainelBombona } from './PainelBombona.tsx';
@@ -14,6 +14,9 @@ import { PainelBombona } from './PainelBombona.tsx';
 type Filtro = Status | 'ALERTA' | null;
 
 const CIANORTE: [number, number] = [-23.66, -52.64];
+/** O zoom que costuma enquadrar todos os clientes: começar nele evita baixar tiles de outro zoom à toa. */
+const ZOOM_INICIAL = 10;
+const URL_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const LARGURA_PAINEL = 400;
 
 /** Peso para ordenar a lista: o que precisa de atenção vem primeiro. */
@@ -36,6 +39,7 @@ export function Mapa() {
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<Filtro>(null);
   const viagens = useViagens(bombonas);
+  const [mapa, setMapa] = useState<L.Map | null>(null);
 
   const todas = useMemo(() => Object.values(bombonas), [bombonas]);
   const contagem = useMemo(() => {
@@ -111,7 +115,6 @@ export function Mapa() {
                 </span>
                 <span className="item__linha item__linha--meta">
                   <Bateria nivel={b.bateria} />
-                  <span className="item__sinal">sinal {tempoRelativo(b.ultimoSinal, agora)}</span>
                 </span>
                 {b.alertasAbertos.length > 0 && (
                   <span className="item__alertas">
@@ -127,10 +130,13 @@ export function Mapa() {
       </aside>
 
       <div className="mapa-area">
-        <MapContainer center={CIANORTE} zoom={11} zoomControl={false} className="mapa">
+        <MapContainer ref={setMapa} center={CIANORTE} zoom={ZOOM_INICIAL} zoomControl={false} className="mapa">
+          {/* Fundo de baixa resolução, já baixado na carga: cobre o cinza enquanto os tiles do zoom atual chegam. */}
+          <TileLayer url={URL_TILES} maxNativeZoom={ZOOM_INICIAL} updateWhenZooming={false} />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+            url={URL_TILES}
+            updateWhenZooming={false}
           />
           <ZoomControl position="topleft" />
 
@@ -162,18 +168,7 @@ export function Mapa() {
             </Circle>
           ))}
 
-          {/* Deslocamento de quem saiu da cerca: do ponto esperado até onde a bombona está. */}
-          {todas
-            .filter((b) => b.posicao && b.localEsperado && (b.status === 'EXTRAVIADA' || b.alertasAbertos.includes('FORA_DA_AREA')))
-            .map((b) => (
-              <Polyline
-                key={`desvio-${b.codigo}`}
-                positions={[b.localEsperado!, b.posicao!]}
-                pathOptions={{ className: `linha-desvio ${b.status === 'EXTRAVIADA' ? 'linha-desvio--critico' : ''}` }}
-              />
-            ))}
-
-          {selecionada && bombonas[selecionada] && <Trilha bombona={bombonas[selecionada]} viagem={viagens[selecionada]} />}
+          {selecionada && bombonas[selecionada] && <Trilha key={selecionada} bombona={bombonas[selecionada]} viagem={viagens[selecionada]} />}
 
           {todas
             .filter((b) => b.posicao)
@@ -196,6 +191,7 @@ export function Mapa() {
         </MapContainer>
 
         <Legenda />
+        {selecionada && <BotaoCentralizar map={mapa} posicao={bombonas[selecionada]?.posicao} />}
         {selecionada && bombonas[selecionada] && (
           <PainelBombona key={selecionada} codigo={selecionada} viagem={viagens[selecionada]} aoFechar={() => selecionar(null)} />
         )}
@@ -204,9 +200,11 @@ export function Mapa() {
   );
 }
 
-/** Caminho percorrido pela bombona selecionada, atualizado ao vivo. */
+/** Percurso atual da bombona selecionada, atualizado ao vivo. Ao sair de uma parada, o percurso anterior some. */
 function Trilha({ bombona, viagem }: { bombona: Bombona; viagem?: Viagem }) {
   const [pontos, setPontos] = useState<Ponto[]>([]);
+  const parada = useRef(false);
+  const sinalAnterior = useRef(bombona.ultimoSinal);
 
   useEffect(() => {
     let ativo = true;
@@ -219,11 +217,22 @@ function Trilha({ bombona, viagem }: { bombona: Bombona; viagem?: Viagem }) {
   useEffect(() => {
     const p = bombona.posicao;
     if (!p) return;
+    // Só uma leitura nova no mesmo lugar indica parada; outros eventos (ex.: alerta de sem sinal) repetem a posição.
+    const leituraNova = bombona.ultimoSinal !== sinalAnterior.current;
+    sinalAnterior.current = bombona.ultimoSinal;
     setPontos((atual) => {
       const ultimo = atual[atual.length - 1];
-      return ultimo && ultimo.lat === p.lat && ultimo.lng === p.lng ? atual : [...atual, p];
+      if (ultimo && ultimo.lat === p.lat && ultimo.lng === p.lng) {
+        if (leituraNova) parada.current = true;
+        return atual;
+      }
+      if (ultimo && parada.current) {
+        parada.current = false;
+        return [ultimo, p];
+      }
+      return [...atual, p];
     });
-  }, [bombona.posicao]);
+  }, [bombona.posicao, bombona.ultimoSinal]);
 
   return (
     <>
@@ -235,7 +244,7 @@ function Trilha({ bombona, viagem }: { bombona: Bombona; viagem?: Viagem }) {
         </>
       )}
       {/* Em viagem, o caminho que falta pelas ruas. */}
-      {viagem && <Polyline positions={viagem.caminho} pathOptions={{ className: 'linha-destino' }} />}
+      {viagem && viagem.caminho.length > 0 && <Polyline positions={viagem.caminho} pathOptions={{ className: 'linha-destino' }} />}
     </>
   );
 }
@@ -246,13 +255,37 @@ function areaDoPainel() {
   return { direita: 0, baixo: document.querySelector<HTMLElement>('.painel')?.offsetHeight ?? 0 };
 }
 
-/** Ajusta o mapa quando o operador escolhe uma bombona ou um cliente. */
+/** O centro do mapa que deixa a posição no meio da área que o painel não cobre. */
+function centroNaAreaLivre(map: L.Map, posicao: L.LatLng, zoom: number) {
+  const { direita, baixo } = areaDoPainel();
+  return map.unproject(map.project(posicao, zoom).add([direita / 2, baixo / 2]), zoom);
+}
+
+/** Leva o mapa até a bombona uma vez, como o botão de localização do Google Maps. Depois a tela fica livre. */
+function BotaoCentralizar({ map, posicao }: { map: L.Map | null; posicao?: Ponto | null }) {
+  if (!map || !posicao) return null;
+  return (
+    <button
+      type="button"
+      className="centralizar"
+      aria-label="Centralizar na bombona"
+      title="Centralizar na bombona"
+      onClick={() => map.flyTo(centroNaAreaLivre(map, L.latLng(posicao), map.getZoom()), map.getZoom(), { duration: 0.8 })}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" strokeWidth="2" />
+        <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+        <path d="M12 2v3.5M12 18.5V22M2 12h3.5M18.5 12H22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </button>
+  );
+}
+
+/** Ajusta o mapa quando o operador escolhe uma bombona ou um cliente. Depois disso, a tela é dele: o mapa não a segue. */
 function Enquadrar({ bombona, cliente }: { bombona?: Bombona; cliente?: { lat: number; lng: number } }) {
   const map = useMap();
   const codigo = bombona?.codigo;
   const ultimo = useRef<string | null>(null);
-  const seguindo = useRef<string | null>(null);
-  const voandoAte = useRef(0);
 
   useEffect(() => {
     if (!bombona?.posicao || ultimo.current === codigo) return;
@@ -267,29 +300,13 @@ function Enquadrar({ bombona, cliente }: { bombona?: Bombona; cliente?: { lat: n
       zoom = Math.min(16, map.getBoundsZoom(L.latLngBounds([referencia, espelho]), false, L.point(direita + 80, baixo + 80)));
     }
     // O painel cobre parte do mapa: desloca o centro para a bombona ficar no meio da área livre.
-    const centro = map.unproject(map.project(posicao, zoom).add([direita / 2, baixo / 2]), zoom);
-    map.flyTo(centro, zoom, { duration: 0.8 });
-    voandoAte.current = Date.now() + 900;
+    map.flyTo(centroNaAreaLivre(map, posicao, zoom), zoom, { duration: 0.8 });
     // Só reenquadra ao trocar de bombona, não a cada leitura.
   }, [codigo, Boolean(bombona?.posicao)]);
 
   useEffect(() => {
-    if (!codigo) ultimo.current = seguindo.current = null;
+    if (!codigo) ultimo.current = null;
   }, [codigo]);
-
-  // Segue a bombona selecionada quando ela sai da área visível.
-  const posicao = bombona?.posicao;
-  useEffect(() => {
-    if (!posicao || ultimo.current !== codigo) return;
-    // A primeira posição já foi tratada pelo enquadramento acima; um pan durante o voo o cancelaria.
-    if (seguindo.current !== codigo) {
-      seguindo.current = codigo ?? null;
-      return;
-    }
-    if (Date.now() < voandoAte.current) return;
-    const { direita, baixo } = areaDoPainel();
-    map.panInside(posicao, { paddingTopLeft: [60, 60], paddingBottomRight: [direita + 24, baixo + 60] });
-  }, [posicao, codigo, map]);
 
   // A lista de clientes é recarregada a cada evento; só voa quando o cliente focado muda de fato.
   const clienteLat = cliente?.lat;
