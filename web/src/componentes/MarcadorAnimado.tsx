@@ -11,7 +11,8 @@ type Props = {
   children?: ReactNode;
 };
 
-const DURACAO_MS = 1200;
+/** Igual ao intervalo entre leituras em movimento: o pino chega a um ponto quando já sai para o próximo. */
+const DURACAO_MS = 250;
 
 /** Marcador que desliza até a nova posição, como o entregador no app de delivery. */
 export function MarcadorAnimado({ posicao, icone, zIndexOffset, aoClicar, children }: Props) {
@@ -29,8 +30,7 @@ export function MarcadorAnimado({ posicao, icone, zIndexOffset, aoClicar, childr
     let quadro = 0;
     const passo = (t: number) => {
       const k = Math.min(1, (t - t0) / DURACAO_MS);
-      const e = 1 - (1 - k) ** 3;
-      marcador.setLatLng([de.lat + (posicao.lat - de.lat) * e, de.lng + (posicao.lng - de.lng) * e]);
+      marcador.setLatLng([de.lat + (posicao.lat - de.lat) * k, de.lng + (posicao.lng - de.lng) * k]);
       if (k < 1) quadro = requestAnimationFrame(passo);
     };
     quadro = requestAnimationFrame(passo);

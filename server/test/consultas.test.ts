@@ -54,14 +54,51 @@ describe('API de consulta', () => {
       id: number;
       dispositivo_id: string;
     };
-    const ins = ctx.db.prepare(
-      "INSERT INTO leituras (bombona_id, dispositivo_id, lat, lng, bateria, registrado_em) VALUES (?, ?, -23.6, -52.6, 80, ?)",
-    );
-    for (let i = 0; i < 205; i++) ins.run(id, dispositivo_id, new Date(Date.now() - (205 - i) * 1000).toISOString());
+    const ins = ctx.db.prepare("INSERT INTO leituras (bombona_id, dispositivo_id, lat, lng, bateria, registrado_em) VALUES (?, ?, -23.6, ?, 80, ?)");
+    for (let i = 0; i < 205; i++) ins.run(id, dispositivo_id, -52.6 + i * 0.0001, new Date(Date.now() - (205 - i) * 1000).toISOString());
     const trilha = async (q: string) => (await (await fetch(`${api.url}/bombonas/BO-0001/trilha${q}`)).json()).length;
     assert.equal(await trilha('?limite=3'), 3);
     assert.equal(await trilha('?limite=-1'), 200);
     assert.equal(await trilha('?limite=abc'), 200);
+  });
+
+  it('não repete na trilha as leituras da bombona parada: o tempo parada não apaga o caminho', async () => {
+    const { id, dispositivo_id } = ctx.db.prepare("SELECT id, dispositivo_id FROM bombonas WHERE codigo = 'BO-0002'").get() as {
+      id: number;
+      dispositivo_id: string;
+    };
+    const ins = ctx.db.prepare("INSERT INTO leituras (bombona_id, dispositivo_id, lat, lng, bateria, registrado_em) VALUES (?, ?, -23.7, ?, 80, ?)");
+    const quando = (i: number) => new Date(Date.now() - (100 - i) * 1000).toISOString();
+    for (let i = 0; i < 5; i++) ins.run(id, dispositivo_id, -52.7 + i * 0.001, quando(i));
+    for (let i = 5; i < 50; i++) ins.run(id, dispositivo_id, -52.7 + 4 * 0.001, quando(i));
+    const trilha = await (await fetch(`${api.url}/bombonas/BO-0002/trilha?limite=5`)).json();
+    assert.deepEqual(
+      trilha.map((p: { lng: number }) => p.lng),
+      [0, 1, 2, 3, 4].map((i) => -52.7 + i * 0.001),
+    );
+  });
+
+  it('a trilha mostra só o último percurso: parada encerra um e a próxima saída começa outro', async () => {
+    const { id, dispositivo_id } = ctx.db.prepare("SELECT id, dispositivo_id FROM bombonas WHERE codigo = 'BO-0003'").get() as {
+      id: number;
+      dispositivo_id: string;
+    };
+    const ins = ctx.db.prepare("INSERT INTO leituras (bombona_id, dispositivo_id, lat, lng, bateria, registrado_em) VALUES (?, ?, -23.8, ?, 80, ?)");
+    let i = 0;
+    const leituras = (...lngs: number[]) => lngs.forEach((lng) => ins.run(id, dispositivo_id, lng, new Date(Date.now() - 100_000 + i++ * 1000).toISOString()));
+    const lngs = async () => ((await (await fetch(`${api.url}/bombonas/BO-0003/trilha`)).json()) as { lng: number }[]).map((p) => p.lng);
+
+    leituras(-52.1, -52.2, -52.3);
+    assert.deepEqual(await lngs(), [-52.1, -52.2, -52.3], 'primeiro percurso, em andamento');
+
+    leituras(-52.3, -52.3);
+    assert.deepEqual(await lngs(), [-52.1, -52.2, -52.3], 'parada: o percurso concluído continua visível');
+
+    leituras(-52.4);
+    assert.deepEqual(await lngs(), [-52.3, -52.4], 'nova saída: o percurso anterior some');
+
+    leituras(-52.5, -52.5, -52.6);
+    assert.deepEqual(await lngs(), [-52.5, -52.6], 'outra parada e outra saída');
   });
 
   it('classifica o risco dos clientes pelo histórico (RN14)', async () => {

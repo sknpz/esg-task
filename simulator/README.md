@@ -11,10 +11,10 @@ controle da demonstração (`GET /api/simulacao/estado`). Esse canal não existi
 
 | Situação                    | O que o "rastreador" faz                                      |
 |-----------------------------|---------------------------------------------------------------|
-| Parada (pátio/cliente)      | Fica no lugar, com ruído de GPS, e manda sinal a cada 5 ciclos |
-| `EM_ROTA`                   | Anda até o destino pelas ruas, como se estivesse no caminhão (rota do OSRM; sem resposta dele, vai em linha reta) |
-| Cenário **VENDA**           | Alguém leva a bombona de 4 a 9 km, numa direção aleatória     |
-| Cenário **DEVOLUÇÃO**       | A bombona volta para o local esperado                         |
+| Parada (pátio/cliente)      | Fica no lugar, sem ruído, e manda sinal a cada segundo        |
+| `EM_ROTA`                   | Anda pelas ruas até o destino, como se estivesse no caminhão, e continua até o ponto mesmo depois de a chegada ser confirmada na borda da cerca |
+| Cenário **VENDA**           | Alguém leva a bombona pelas ruas, de 4 a 9 km, numa direção aleatória, e para numa rua |
+| Cenário **DEVOLUÇÃO**       | A bombona volta pelas ruas para o local esperado              |
 | Cenário **SEM SINAL**       | O rastreador fica calado até passar o limite de sem sinal     |
 | Cenário **BATERIA FRACA**   | A bateria cai para 14%                                        |
 | Coleta registrada no painel | Quem estava com a bombona "perde" ela e o caminhão a leva ao pátio |
@@ -26,6 +26,6 @@ controle da demonstração (`GET /api/simulacao/estado`). Esse canal não existi
 |-----------------------|------------------------------|-------------------------------------------------|
 | `API_URL`             | `http://localhost:3333/api`  | Endereço da API                                 |
 | `SIM_TOKEN`           | `sim-demo-token`             | Token do canal de simulação (igual ao da API)   |
-| `SIM_TICK_MS`         | `3000`                       | Intervalo do ciclo                              |
+| `SIM_TICK_MS`         | `250`                        | Intervalo do ciclo (leitura em movimento)       |
 | `SIM_AUTO_VENDA_MIN`  | `0` (desligado)              | Sorteia uma "venda" a cada N minutos            |
-| `ROTEADOR_URL`        | `https://router.project-osrm.org` | Serviço de rotas (OSRM) usado nas viagens do caminhão. O mapa usa o mesmo, via `VITE_ROTEADOR_URL` |
+| `ROTEADOR_URL`        | `https://router.project-osrm.org` | Serviço de rotas (OSRM) usado em todas as viagens; sem resposta dele, a bombona espera e tenta de novo. O mapa usa o mesmo, via `VITE_ROTEADOR_URL` |

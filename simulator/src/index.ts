@@ -27,26 +27,39 @@ type Aparelho = {
   remoto: DispositivoRemoto;
   posicao: Ponto;
   bateria: number;
-  /** Para onde quem "comprou" a bombona está levando. */
-  desvio?: Ponto;
+  /** Alguém "comprou" a bombona e está levando embora. */
+  desvio?: boolean;
   /** A bombona está sendo devolvida ao local esperado. */
   devolvendo?: boolean;
   caladoAte?: number;
   ticksParado: number;
-  /** Caminho pelas ruas até o alvo da viagem (pontos que ainda faltam). */
-  rota?: { alvo: string; pontos: Ponto[] };
+  /** Caminho pelas ruas da viagem atual (pontos que ainda faltam). */
+  rota?: { chave: string; pontos: Ponto[] };
+  /** Busca de rota em andamento ou aguardando nova tentativa. */
+  planejando?: { chave: string; ocupado: boolean; proximaEm: number };
 };
+
+/** Um deslocamento pelas ruas: caminhão, comprador ou devolução. */
+type Viagem = { chave: string; nome: string; passo: number; buscar: () => Promise<Ponto[]> };
 
 const API = process.env.API_URL ?? 'http://localhost:3333/api';
 const TOKEN_SIMULADOR = process.env.SIM_TOKEN ?? 'sim-demo-token';
-const TICK_MS = Number(process.env.SIM_TICK_MS) || 3000;
-/** Bombona parada manda sinal a cada N ticks; em movimento, a cada tick. */
-const TICKS_ENTRE_SINAIS_PARADA = 5;
-/** Quanto anda por tick (tempo da demonstração é acelerado). */
-const PASSO_CAMINHAO_M = 300;
-const PASSO_VENDA_M = 220;
-/** Serviço de rotas (OSRM). O público serve para a demonstração; sem ele, o caminhão anda em linha reta. */
+const TICK_MS = Number(process.env.SIM_TICK_MS) || 250;
+/** Bombona parada manda sinal uma vez por segundo; em movimento, a cada tick. */
+const TICKS_ENTRE_SINAIS_PARADA = Math.max(1, Math.round(1000 / TICK_MS));
+/** Quanto anda por tick (tempo da demonstração é acelerado): 100 m/s no caminhão, 73 m/s na venda. */
+const PASSO_CAMINHAO_M = (100 * TICK_MS) / 1000;
+const PASSO_VENDA_M = (73 * TICK_MS) / 1000;
+/** Consumo de bateria por tick, em pontos percentuais. */
+const CONSUMO_MOVIMENTO = (0.05 / 3000) * TICK_MS;
+const CONSUMO_PARADA = (0.01 / 3000) * TICK_MS;
+/** Serviço de rotas (OSRM). Toda viagem anda pelas ruas: sem resposta dele, a bombona espera e tenta de novo. */
 const ROTEADOR = process.env.ROTEADOR_URL ?? 'https://router.project-osrm.org';
+const ESPERA_ENTRE_TENTATIVAS_MS = 2000;
+/** O destino da venda é sorteado até dar num lugar a pelo menos esta distância, sem volta absurda pelas ruas. */
+const VENDA_DISTANCIA_MINIMA_M = 3000;
+const VENDA_DESVIO_MAXIMO = 3;
+const VENDA_SORTEIOS = 5;
 /** Minutos entre "vendas" automáticas de bombonas aleatórias (0 desliga). */
 const AUTO_VENDA_MIN = Number(process.env.SIM_AUTO_VENDA_MIN) || 0;
 
@@ -68,21 +81,6 @@ function deslocar(p: Ponto, norteM: number, lesteM: number): Ponto {
   return { lat: p.lat + norteM / M_POR_GRAU_LAT, lng: p.lng + lesteM / mPorGrauLng(p.lat) };
 }
 
-/** Anda `passo` metros em direção ao alvo, com uma leve curva para parecer rua. Devolve true ao chegar. */
-function andar(ap: Aparelho, alvo: Ponto, passo: number) {
-  const falta = distanciaM(ap.posicao, alvo);
-  if (falta <= passo) {
-    ap.posicao = alvo;
-    return true;
-  }
-  const f = passo / falta;
-  const norte = (alvo.lat - ap.posicao.lat) * M_POR_GRAU_LAT * f;
-  const leste = (alvo.lng - ap.posicao.lng) * mPorGrauLng(ap.posicao.lat) * f;
-  const curva = (Math.random() - 0.5) * 0.5;
-  ap.posicao = deslocar(ap.posicao, norte - leste * curva, leste + norte * curva);
-  return false;
-}
-
 /** Anda `passo` metros pelo caminho, consumindo os pontos alcançados. Devolve true ao fim do caminho. */
 function seguir(ap: Aparelho, pontos: Ponto[], passo: number) {
   while (pontos.length) {
@@ -98,10 +96,6 @@ function seguir(ap: Aparelho, pontos: Ponto[], passo: number) {
   return true;
 }
 
-const ruidoGps = (p: Ponto, metros: number) => deslocar(p, (Math.random() - 0.5) * 2 * metros, (Math.random() - 0.5) * 2 * metros);
-
-const ROSA = ['norte', 'nordeste', 'leste', 'sudeste', 'sul', 'sudoeste', 'oeste', 'noroeste'];
-
 // ---------- comunicação ----------
 
 async function buscarEstado() {
@@ -110,35 +104,83 @@ async function buscarEstado() {
   return (await r.json()) as { dispositivos: DispositivoRemoto[]; comandos: Comando[] };
 }
 
-/** Caminho pelas ruas de `de` até `para`. Termina no próprio alvo, que pode ficar fora da rua. */
-async function buscarRota(de: Ponto, para: Ponto): Promise<Ponto[]> {
+async function consultarRota(de: Ponto, para: Ponto) {
   const url = `${ROTEADOR}/route/v1/driving/${de.lng},${de.lat};${para.lng},${para.lat}?overview=full&geometries=geojson`;
   const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const corpo = (await r.json()) as { routes?: { geometry: { coordinates: [number, number][] } }[] };
-  const coordenadas = corpo.routes?.[0]?.geometry.coordinates;
-  if (!coordenadas?.length) throw new Error('nenhuma rota encontrada');
-  return [...coordenadas.map(([lng, lat]) => ({ lat, lng })), para];
+  const corpo = (await r.json()) as { routes?: { distance: number; geometry: { coordinates: [number, number][] } }[] };
+  const rota = corpo.routes?.[0];
+  if (!rota?.geometry.coordinates.length) throw new Error('nenhuma rota encontrada');
+  return { pontos: rota.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })), distanciaM: rota.distance };
 }
 
-/** Garante que a bombona em viagem tem a rota até o alvo atual. */
-async function planejarViagem(ap: Aparelho) {
-  const alvo = ap.remoto.alvo!;
-  const chave = `${alvo.lat},${alvo.lng}`;
-  if (ap.rota?.alvo === chave) return;
+/** Caminho pelas ruas de `de` até `para`. Termina no próprio alvo, que pode ficar fora da rua. */
+async function buscarRota(de: Ponto, para: Ponto): Promise<Ponto[]> {
+  return [...(await consultarRota(de, para)).pontos, para];
+}
+
+/** Para onde o comprador leva a bombona: de 4 a 9 km dali, terminando na rua mais próxima do ponto sorteado. */
+async function buscarRotaDeVenda(de: Ponto): Promise<Ponto[]> {
+  let reserva: Ponto[] | undefined;
+  let erro: unknown;
+  for (let i = 0; i < VENDA_SORTEIOS; i++) {
+    const angulo = Math.random() * 2 * Math.PI;
+    const distancia = 4000 + Math.random() * 5000;
+    try {
+      const { pontos, distanciaM: pelasRuas } = await consultarRota(de, deslocar(de, Math.cos(angulo) * distancia, Math.sin(angulo) * distancia));
+      const reta = distanciaM(de, pontos[pontos.length - 1]);
+      if (reta >= VENDA_DISTANCIA_MINIMA_M) {
+        if (pelasRuas <= reta * VENDA_DESVIO_MAXIMO) return pontos;
+        reserva = pontos;
+      }
+    } catch (e) {
+      erro = e;
+    }
+  }
+  if (reserva) return reserva;
+  throw erro ?? new Error('nenhum destino de venda encontrado');
+}
+
+/** A viagem que a bombona deveria estar fazendo agora, se houver. */
+function viagemAtual(ap: Aparelho): Viagem | null {
+  const { status, alvo } = ap.remoto;
+  if (status === 'EM_ROTA' && alvo) {
+    return { chave: `caminhao:${alvo.lat},${alvo.lng}`, nome: alvo.nome, passo: PASSO_CAMINHAO_M, buscar: () => buscarRota(ap.posicao, alvo) };
+  }
+  if (ap.desvio) return { chave: 'venda', nome: 'o comprador', passo: PASSO_VENDA_M, buscar: () => buscarRotaDeVenda(ap.posicao) };
+  if (ap.devolvendo && alvo) {
+    return { chave: `devolucao:${alvo.lat},${alvo.lng}`, nome: alvo.nome, passo: PASSO_VENDA_M, buscar: () => buscarRota(ap.posicao, alvo) };
+  }
+  return null;
+}
+
+/** Garante a rota da viagem. Não segura o ciclo: enquanto a rota não chega, a bombona espera no lugar. */
+async function planejarViagem(ap: Aparelho, viagem: Viagem) {
+  if (ap.rota?.chave === viagem.chave) return;
+  if (ap.planejando?.chave !== viagem.chave) ap.planejando = { chave: viagem.chave, ocupado: false, proximaEm: 0 };
+  const plano = ap.planejando;
+  if (plano.ocupado || Date.now() < plano.proximaEm) return;
+  plano.ocupado = true;
   try {
-    ap.rota = { alvo: chave, pontos: await buscarRota(ap.posicao, alvo) };
-    console.log(`[${ap.remoto.bombona}] rota até ${alvo.nome}: ${ap.rota.pontos.length} pontos pelas ruas`);
+    const pontos = await viagem.buscar();
+    if (ap.planejando !== plano) return;
+    ap.rota = { chave: viagem.chave, pontos };
+    ap.planejando = undefined;
+    console.log(`[${ap.remoto.bombona}] rota até ${viagem.nome}: ${pontos.length} pontos pelas ruas`);
   } catch (e) {
-    ap.rota = { alvo: chave, pontos: [alvo] };
-    console.warn(`[${ap.remoto.bombona}] sem rota até ${alvo.nome} (${(e as Error).message}); seguindo em linha reta`);
+    if (ap.planejando !== plano) return;
+    plano.ocupado = false;
+    plano.proximaEm = Date.now() + ESPERA_ENTRE_TENTATIVAS_MS;
+    const erro = e as Error;
+    console.warn(`[${ap.remoto.bombona}] rota até ${viagem.nome} falhou (${erro.message}${erro.cause ? `: ${(erro.cause as Error).message}` : ''}); tentando de novo`);
   }
 }
 
 /** Exatamente o que um rastreador real enviaria (docs/contrato-dispositivo.md). */
 async function enviarLeitura(ap: Aparelho, emMovimento: boolean) {
+  // Sem ruído de GPS: leituras frequentes fariam o pino tremer e a trilha sair da rua.
+  const { lat, lng } = ap.posicao;
   const precisao = emMovimento ? 15 : 6 + Math.random() * 6;
-  const { lat, lng } = ruidoGps(ap.posicao, precisao / 2);
   const r = await fetch(`${API}/telemetria`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ap.remoto.token}` },
@@ -153,17 +195,14 @@ function aplicarComando(c: Comando) {
   const ap = [...aparelhos.values()].find((a) => a.remoto.bombona === c.bombona);
   if (!ap) return;
   switch (c.tipo) {
-    case 'VENDA': {
-      const angulo = Math.random() * 2 * Math.PI;
-      const distancia = 4000 + Math.random() * 5000;
-      ap.desvio = deslocar(ap.posicao, Math.cos(angulo) * distancia, Math.sin(angulo) * distancia);
+    case 'VENDA':
+      ap.desvio = true;
       ap.devolvendo = false;
-      const rumo = ROSA[Math.round(((angulo * 180) / Math.PI / 45)) % 8];
-      console.log(`[${c.bombona}] cenário VENDA: alguém está levando a bombona ${(distancia / 1000).toFixed(1)} km a ${rumo}`);
+      ap.rota = undefined;
+      console.log(`[${c.bombona}] cenário VENDA: alguém está levando a bombona pelas ruas`);
       break;
-    }
     case 'DEVOLUCAO':
-      ap.desvio = undefined;
+      ap.desvio = false;
       ap.devolvendo = true;
       console.log(`[${c.bombona}] cenário DEVOLUÇÃO: voltando para ${ap.remoto.alvo?.nome ?? 'o local esperado'}`);
       break;
@@ -200,10 +239,9 @@ function sincronizar(remotos: DispositivoRemoto[]) {
     }
     // Coletada pelo caminhão: quem estava com a bombona perdeu ela.
     if (remoto.status === 'EM_ROTA' && ap.remoto.status !== 'EM_ROTA') {
-      ap.desvio = undefined;
+      ap.desvio = false;
       ap.devolvendo = false;
     }
-    if (remoto.status !== 'EM_ROTA') ap.rota = undefined;
     // Chegou ao pátio: o rastreador é recarregado e já avisa a nova bateria na próxima leitura.
     if (remoto.status === 'PATIO' && ap.remoto.status !== 'PATIO') {
       ap.bateria = 100;
@@ -214,34 +252,43 @@ function sincronizar(remotos: DispositivoRemoto[]) {
   }
 }
 
+/** Anda pela rota da viagem. Sem viagem, termina o caminho: a chegada é confirmada na borda da cerca, antes do alvo. */
+function mover(ap: Aparelho, viagem: Viagem | null) {
+  const rota = ap.rota;
+  if (!rota) return false;
+  const emViagem = viagem?.chave === rota.chave;
+  if (!emViagem && viagem) return false;
+  const andando = rota.pontos.length > 0;
+  if (seguir(ap, rota.pontos, viagem?.passo ?? PASSO_CAMINHAO_M)) {
+    if (emViagem && ap.devolvendo) ap.devolvendo = false;
+    if (!viagem) ap.rota = undefined;
+  }
+  return andando;
+}
+
 async function tick() {
   const { dispositivos, comandos } = await buscarEstado();
   sincronizar(dispositivos);
   comandos.forEach(aplicarComando);
-  await Promise.all([...aparelhos.values()].filter((ap) => ap.remoto.status === 'EM_ROTA' && ap.remoto.alvo).map(planejarViagem));
 
   const envios: Promise<void>[] = [];
   for (const ap of aparelhos.values()) {
+    const viagem = viagemAtual(ap);
+    if (viagem) void planejarViagem(ap, viagem);
+    else ap.planejando = undefined;
+
     if (ap.caladoAte && ap.caladoAte > Date.now()) continue;
     if (ap.caladoAte) {
       ap.caladoAte = undefined;
       console.log(`[${ap.remoto.bombona}] sinal de volta`);
     }
 
-    let emMovimento = false;
-    if (ap.desvio && ap.remoto.status !== 'EM_ROTA') {
-      emMovimento = !andar(ap, ap.desvio, PASSO_VENDA_M);
-    } else if (ap.devolvendo && ap.remoto.alvo) {
-      ap.devolvendo = !andar(ap, ap.remoto.alvo, PASSO_VENDA_M);
-      emMovimento = true;
-    } else if (ap.remoto.status === 'EM_ROTA' && ap.rota) {
-      seguir(ap, ap.rota.pontos, PASSO_CAMINHAO_M);
-      emMovimento = true;
-    }
-
-    ap.bateria = Math.max(0, ap.bateria - (emMovimento ? 0.05 : 0.01));
+    const emMovimento = mover(ap, viagem);
+    ap.bateria = Math.max(0, ap.bateria - (emMovimento ? CONSUMO_MOVIMENTO : CONSUMO_PARADA));
+    // A leitura repetida logo ao parar marca o fim do percurso, mesmo que a bombona saia de novo em menos de 1 s.
+    const acabouDeParar = !emMovimento && ap.ticksParado === 0;
     ap.ticksParado = emMovimento ? 0 : ap.ticksParado + 1;
-    if (emMovimento || ap.ticksParado % TICKS_ENTRE_SINAIS_PARADA === 0) {
+    if (emMovimento || acabouDeParar || ap.ticksParado % TICKS_ENTRE_SINAIS_PARADA === 0) {
       envios.push(enviarLeitura(ap, emMovimento).catch((e) => console.warn(`[${ap.remoto.bombona}] falha no envio: ${e.message}`)));
     }
   }

@@ -92,7 +92,7 @@ export const api = {
   indicadores: () => requisitar<Indicadores>('/indicadores'),
   bombonas: () => requisitar<Bombona[]>('/bombonas'),
   bombona: (codigo: string) => requisitar<DetalheBombona>(`/bombonas/${codigo}`),
-  trilha: (codigo: string) => requisitar<PontoTrilha[]>(`/bombonas/${codigo}/trilha?limite=400`),
+  trilha: (codigo: string) => requisitar<PontoTrilha[]>(`/bombonas/${codigo}/trilha?limite=2000`),
   clientes: () => requisitar<Cliente[]>('/clientes'),
   alertas: (status?: 'ABERTO' | 'RESOLVIDO') => requisitar<Alerta[]>(`/alertas${status ? `?status=${status}` : ''}`),
   entregar: (codigo: string, clienteId: number, observacao?: string) =>

@@ -126,14 +126,31 @@ export function detalheBombona(db: Banco, config: Config, codigo: string) {
   return { ...paraDto(linha, config), movimentacoes, alertas };
 }
 
+/**
+ * O último percurso da bombona: do ponto de onde ela saiu até onde está. Parada (leitura repetida no mesmo
+ * lugar) encerra um percurso: ele continua visível até a próxima saída, que começa outro.
+ */
 export function trilha(db: Banco, bombonaId: number, limite = 200) {
-  const pontos = db
+  // Leituras repetidas da bombona parada não entram: senão o tempo parada empurraria o caminho para fora do limite.
+  const linhas = db
     .prepare(
-      `SELECT lat, lng, bateria, registrado_em AS registradoEm, dentro_cerca AS dentroCerca
-       FROM leituras WHERE bombona_id = ? ORDER BY id DESC LIMIT ?`,
+      `SELECT lat, lng, bateria, registradoEm, dentroCerca, parou
+       FROM (
+         SELECT id, lat, lng, bateria, registrado_em AS registradoEm, dentro_cerca AS dentroCerca,
+                LAG(lat) OVER janela AS lat_anterior, LAG(lng) OVER janela AS lng_anterior,
+                LEAD(lat) OVER janela = lat AND LEAD(lng) OVER janela = lng AS parou
+         FROM leituras WHERE bombona_id = ?
+         WINDOW janela AS (ORDER BY id)
+       )
+       WHERE lat_anterior IS NULL OR lat <> lat_anterior OR lng <> lng_anterior
+       ORDER BY id DESC LIMIT ?`,
     )
-    .all(bombonaId, limite);
-  return pontos.reverse();
+    .all(bombonaId, limite) as Array<{ lat: number; lng: number; bateria: number; registradoEm: string; dentroCerca: number | null; parou: number | null }>;
+
+  // Do mais recente para trás, até o ponto onde ela estava parada antes de sair. O mais recente pode ser a parada atual.
+  const inicio = linhas.findIndex((p, i) => i > 0 && p.parou);
+  const percurso = inicio === -1 ? linhas : linhas.slice(0, inicio + 1);
+  return percurso.map(({ parou: _parou, ...ponto }) => ponto).reverse();
 }
 
 export const nivelRisco = (incidentes: number) => (incidentes >= 3 ? 'ALTO' : incidentes >= 1 ? 'MEDIO' : 'BAIXO');
