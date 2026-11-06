@@ -7,7 +7,7 @@ export function Indicadores() {
   const itens = [
     { rotulo: 'Bombonas', valor: numero(ind.total), detalhe: `${ind.porStatus.PATIO} no pátio` },
     { rotulo: 'Em clientes', valor: numero(ind.porStatus.EM_CLIENTE), detalhe: `${numero(ind.capacidadeEmCampoL)} L de capacidade` },
-    { rotulo: 'Em rota', valor: numero(ind.porStatus.EM_ROTA), detalhe: 'no caminhão' },
+    { rotulo: 'Em rota', valor: numero(ind.porStatus.EM_ROTA), detalhe: 'no furgão' },
     {
       rotulo: 'Extraviadas',
       valor: numero(ind.porStatus.EXTRAVIADA),

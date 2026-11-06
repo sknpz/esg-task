@@ -26,9 +26,13 @@ bombona quase sempre está parada, então o que importa é perceber quando ela *
 - **Não temos hardware.** O dispositivo é desconhecido, então o sistema define um
   [contrato HTTP](docs/contrato-dispositivo.md) que qualquer rastreador (ou gateway) pode cumprir. Os
   dispositivos são **simulados** por um processo separado.
-- **Não conhecemos as regras da empresa.** As [regras de negócio](docs/regras-de-negocio.md) são hipóteses
-  documentadas e parametrizáveis.
-- Clientes, endereços e números são **fictícios**.
+- **Conhecemos só parte da operação.** Vem da apresentação da Bio Óleo em aula (Aula 07): são 1.453 pontos
+  atendidos, em mais de 70 municípios do PR, num raio de 250 km de Cianorte; os veículos são furgões e já
+  são rastreados em tempo real; cada coleta é paga pelos litros coletados; as bombonas têm lacre com trava.
+  O sumiço por venda clandestina não aparece nos slides, mas é o problema que o protótipo trabalha. As
+  [regras de negócio](docs/regras-de-negocio.md), os raios, os tempos e os limites continuam **hipóteses**
+  parametrizáveis, a validar com a empresa.
+- Clientes, endereços e números do seed são **fictícios**.
 
 ## Arquitetura
 
@@ -98,14 +102,16 @@ As variáveis de ambiente (tempo de sem sinal, distância de extravio etc.) est�
 ## Roteiro de demonstração
 
 1. Abra o painel. As bombonas aparecem nos clientes, em Cianorte e nas cidades vizinhas. Duas já saem do pátio
-   em rota: clique numa delas para ver o "caminhão" chegando, e a entrega se confirma sozinha.
+   em rota: clique numa delas para ver o "furgão" chegando, e a entrega se confirma sozinha.
 2. Clique numa bombona **No cliente** e, em **Simulação**, escolha **Cliente vendeu a bombona**.
 3. Em poucos segundos ela sai da cerca: abre o alerta **Fora da área**, chega o aviso e a trilha começa a ser
    desenhada.
 4. Passando de 2 km, ela vira **Extraviada** e o cliente ganha um incidente no ranking de risco.
-5. Escolha **Devolver ao lugar**: os alertas se fecham sozinhos. Ou registre a **recuperação**: o caminhão
+5. Escolha **Devolver ao lugar**: os alertas se fecham sozinhos. Ou registre a **recuperação**: o furgão
    leva a bombona de volta ao pátio.
-6. Teste também **Cortar o sinal** (alerta de sem sinal depois de 45 s) e **Bateria fraca**.
+6. Registre uma **coleta com poucos litros** num cliente com histórico e veja o aviso **Coleta abaixo do
+   esperado** (RN18) na tela Alertas.
+7. Teste também **Cortar o sinal** (alerta de sem sinal depois de 45 s) e **Bateria fraca**.
 
 ## Próximos passos (fora do protótipo)
 

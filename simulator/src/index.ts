@@ -8,7 +8,7 @@
  * de controle da demonstração (GET /api/simulacao/estado). Esse canal não existe num cenário real.
  */
 
-import { comprimentoM, distanciaM, passoDaViagem, type Ponto } from './percurso.ts';
+import { comprimentoM, distanciaM, M_POR_GRAU_LAT, mPorGrauLng, passoDaViagem, type Ponto } from './percurso.ts';
 
 type Local = Ponto & { nome: string; raioM: number };
 type Status = 'PATIO' | 'EM_ROTA' | 'EM_CLIENTE' | 'EXTRAVIADA';
@@ -40,16 +40,16 @@ type Aparelho = {
   planejando?: { chave: string; ocupado: boolean; proximaEm: number };
 };
 
-/** Um deslocamento pelas ruas: caminhão, comprador ou devolução. */
-type Viagem = { chave: string; nome: string; passo: number; buscar: () => Promise<Ponto[]> };
+/** Um deslocamento pelas ruas: furgão, comprador ou devolução. */
+type Viagem = { chave: string; doFurgao: boolean; nome: string; passo: number; buscar: () => Promise<Ponto[]> };
 
 const API = process.env.API_URL ?? 'http://localhost:3333/api';
 const TOKEN_SIMULADOR = process.env.SIM_TOKEN ?? 'sim-demo-token';
 const TICK_MS = Number(process.env.SIM_TICK_MS) || 250;
 /** Bombona parada manda sinal uma vez por segundo; em movimento, a cada tick. */
 const TICKS_ENTRE_SINAIS_PARADA = Math.max(1, Math.round(1000 / TICK_MS));
-/** Quanto anda por tick (tempo da demonstração é acelerado): 100 m/s no caminhão, 73 m/s na venda. */
-const PASSO_CAMINHAO_M = (100 * TICK_MS) / 1000;
+/** Quanto anda por tick (tempo da demonstração é acelerado): 100 m/s no furgão, 73 m/s na venda. */
+const PASSO_FURGAO_M = (100 * TICK_MS) / 1000;
 /** Teto de duração de uma viagem do furgão: viagens longas aceleram para caber nele. */
 const DURACAO_MAX_VIAGEM_S = 90;
 const PASSO_VENDA_M = (73 * TICK_MS) / 1000;
@@ -70,9 +70,6 @@ const aparelhos = new Map<string, Aparelho>();
 let silencioMs = 70_000;
 
 // ---------- geometria ----------
-
-const M_POR_GRAU_LAT = 111_195;
-const mPorGrauLng = (lat: number) => M_POR_GRAU_LAT * Math.cos((lat * Math.PI) / 180);
 
 function deslocar(p: Ponto, norteM: number, lesteM: number): Ponto {
   return { lat: p.lat + norteM / M_POR_GRAU_LAT, lng: p.lng + lesteM / mPorGrauLng(p.lat) };
@@ -142,11 +139,11 @@ async function buscarRotaDeVenda(de: Ponto): Promise<Ponto[]> {
 function viagemAtual(ap: Aparelho): Viagem | null {
   const { status, alvo } = ap.remoto;
   if (status === 'EM_ROTA' && alvo) {
-    return { chave: `caminhao:${alvo.lat},${alvo.lng}`, nome: alvo.nome, passo: PASSO_CAMINHAO_M, buscar: () => buscarRota(ap.posicao, alvo) };
+    return { chave: `furgao:${alvo.lat},${alvo.lng}`, doFurgao: true, nome: alvo.nome, passo: PASSO_FURGAO_M, buscar: () => buscarRota(ap.posicao, alvo) };
   }
-  if (ap.desvio) return { chave: 'venda', nome: 'o comprador', passo: PASSO_VENDA_M, buscar: () => buscarRotaDeVenda(ap.posicao) };
+  if (ap.desvio) return { chave: 'venda', doFurgao: false, nome: 'o comprador', passo: PASSO_VENDA_M, buscar: () => buscarRotaDeVenda(ap.posicao) };
   if (ap.devolvendo && alvo) {
-    return { chave: `devolucao:${alvo.lat},${alvo.lng}`, nome: alvo.nome, passo: PASSO_VENDA_M, buscar: () => buscarRota(ap.posicao, alvo) };
+    return { chave: `devolucao:${alvo.lat},${alvo.lng}`, doFurgao: false, nome: alvo.nome, passo: PASSO_VENDA_M, buscar: () => buscarRota(ap.posicao, alvo) };
   }
   return null;
 }
@@ -161,8 +158,7 @@ async function planejarViagem(ap: Aparelho, viagem: Viagem) {
   try {
     const pontos = await viagem.buscar();
     if (ap.planejando !== plano) return;
-    const doFurgao = viagem.chave.startsWith('caminhao:');
-    const passo = doFurgao
+    const passo = viagem.doFurgao
       ? passoDaViagem(comprimentoM([ap.posicao, ...pontos]), viagem.passo, (DURACAO_MAX_VIAGEM_S * 1000) / TICK_MS)
       : viagem.passo;
     ap.rota = { chave: viagem.chave, pontos, passo };
@@ -239,7 +235,7 @@ function sincronizar(remotos: DispositivoRemoto[]) {
       });
       continue;
     }
-    // Coletada pelo caminhão: quem estava com a bombona perdeu ela.
+    // Coletada pelo furgão: quem estava com a bombona perdeu ela.
     if (remoto.status === 'EM_ROTA' && ap.remoto.status !== 'EM_ROTA') {
       ap.desvio = false;
       ap.devolvendo = false;

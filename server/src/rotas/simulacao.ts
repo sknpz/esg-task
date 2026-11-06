@@ -53,7 +53,7 @@ export function rotasDeSimulacao(ctx: Contexto) {
         status: b.status,
         posicao: b.lat === null || b.lng === null ? null : { lat: b.lat, lng: b.lng },
         bateria: b.bateria,
-        // Onde o "caminhão" leva a bombona em rota, ou onde ela deveria estar parada.
+        // Onde o "furgão" leva a bombona em rota, ou onde ela deveria estar parada.
         alvo: destino(b, config) ?? localEsperado(b, config),
       })),
       comandos,

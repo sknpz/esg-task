@@ -1,6 +1,6 @@
 import type { Ponto } from './api.ts';
 
-/** Mesmo serviço de rotas (OSRM) que o simulador usa para o caminhão andar pelas ruas. */
+/** Mesmo serviço de rotas (OSRM) que o simulador usa para o furgão andar pelas ruas. */
 const ROTEADOR = import.meta.env.VITE_ROTEADOR_URL ?? 'https://router.project-osrm.org';
 
 /** Caminho pelas ruas de `de` até `para`, ou null se o serviço não responder. */

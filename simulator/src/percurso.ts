@@ -2,8 +2,8 @@
 
 export type Ponto = { lat: number; lng: number };
 
-const M_POR_GRAU_LAT = 111_195;
-const mPorGrauLng = (lat: number) => M_POR_GRAU_LAT * Math.cos((lat * Math.PI) / 180);
+export const M_POR_GRAU_LAT = 111_195;
+export const mPorGrauLng = (lat: number) => M_POR_GRAU_LAT * Math.cos((lat * Math.PI) / 180);
 
 export function distanciaM(a: Ponto, b: Ponto) {
   const dy = (b.lat - a.lat) * M_POR_GRAU_LAT;

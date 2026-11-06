@@ -1,14 +1,20 @@
 # Regras de negócio (hipotéticas)
 
-> Estas regras **não** vieram da Bio Óleo. Foram criadas para o protótipo, a partir do problema descrito
-> (bombonas que somem porque o cliente vende, de propósito ou não). Os números (raios, tempos, limites)
-> são parâmetros configuráveis e devem ser revistos com a empresa antes de qualquer uso real.
+> Os **parâmetros** e as regras abaixo **não** vieram da Bio Óleo: foram criados para o protótipo, a partir do
+> problema descrito (bombonas que somem porque o cliente vende, de propósito ou não). Os números (raios,
+> tempos, limites) são configuráveis e devem ser revistos com a empresa antes de qualquer uso real. Só o
+> contexto da operação, em "Contexto assumido", vem de dados reais.
 
 ## Contexto assumido
 
 A Bio Óleo deixa bombonas nos clientes (restaurantes, pastelarias, lanchonetes, indústrias de alimentos)
-para armazenar óleo de cozinha usado. Periodicamente um caminhão passa, recolhe a bombona cheia e deixa
+para armazenar óleo de cozinha usado. Periodicamente um furgão passa, recolhe a bombona cheia e deixa
 uma vazia. O óleo vira matéria-prima para biodiesel, o que é um ganho ambiental (logística reversa).
+
+Dados reais, da apresentação da Bio Óleo em aula (Aula 07): 1.453 pontos atendidos, em mais de 70 municípios
+do PR, num raio de 250 km de Cianorte; os veículos são furgões e já são rastreados em tempo real; cada coleta
+é paga pelos litros coletados; as bombonas têm lacre com trava. O pátio do protótipo fica no local real da
+empresa (endereço público); clientes e endereços do seed são fictícios.
 
 O prejuízo acontece quando a bombona não está no cliente na hora da coleta: foi vendida a um sucateiro,
 emprestada, levada por outra empresa de coleta ou simplesmente descartada.
@@ -29,7 +35,7 @@ emprestada, levada por outra empresa de coleta ou simplesmente descartada.
 | Status       | Significado                                         | Local esperado               |
 |--------------|-----------------------------------------------------|------------------------------|
 | `PATIO`      | Na base da Bio Óleo                                 | Cerca do pátio               |
-| `EM_ROTA`    | No caminhão, indo para um cliente ou voltando       | Nenhum (sem cerca)           |
+| `EM_ROTA`    | No furgão, indo para um cliente ou voltando       | Nenhum (sem cerca)           |
 | `EM_CLIENTE` | Alocada a um cliente                                | Cerca do cliente             |
 | `EXTRAVIADA` | Longe demais do local esperado                      | Cerca do cliente de origem   |
 
@@ -70,6 +76,15 @@ emprestada, levada por outra empresa de coleta ou simplesmente descartada.
   bombona extraviada (recuperação), os alertas de cerca são resolvidos junto.
 - **RN16 – Autenticação do dispositivo.** Leituras só são aceitas com o token do dispositivo. Se o token for
   desconhecido, a resposta é `401`. Se a coordenada ou a bateria forem inválidas, a resposta é `400`.
+- **RN17 – Litros na coleta.** A coleta normal (bombona `EM_CLIENTE`) exige `litros`: inteiro entre 0 e a
+  capacidade da bombona (fora disso, `400`). Na recuperação (`EXTRAVIADA`) o campo é ignorado, porque o óleo
+  de uma bombona extraviada não representa o cliente. Os litros ficam na movimentação `COLETA`.
+- **RN18 – Coleta abaixo do esperado.** O esperado é a média de litros das últimas `COLETA_HISTORICO_N` (3)
+  coletas normais anteriores do cliente; com menos coletas, a regra não roda. Se `litros` ficar abaixo de
+  esperado × `COLETA_MINIMO_PCT` (50) %, abre o alerta `COLETA_ABAIXO` (severidade `AVISO`), por exemplo
+  "Coleta de 20 L, esperado ~50 L". É só um aviso: não conta no risco do cliente (RN14), não muda o status da
+  bombona e só se resolve manualmente (RN15). Um mês fraco não é fraude. Pela RN12, uma nova coleta baixa
+  substitui o aviso aberto (resolvido pelo sistema).
 
 ## Parâmetros
 
@@ -80,3 +95,5 @@ emprestada, levada por outra empresa de coleta ou simplesmente descartada.
 | Distância de extravio   | 2000 m            | 2000 m       | `EXTRAVIO_METROS`            |
 | Tempo sem sinal         | 21600 s (6 h)     | 45 s         | `SEM_SINAL_SEGUNDOS`         |
 | Bateria baixa           | 20%               | 20%          | `BATERIA_MINIMA`             |
+| Coletas no histórico    | 3                 | 3            | `COLETA_HISTORICO_N`         |
+| Mínimo da coleta        | 50% da média      | 50%          | `COLETA_MINIMO_PCT`          |

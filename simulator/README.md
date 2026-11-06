@@ -12,12 +12,12 @@ controle da demonstração (`GET /api/simulacao/estado`). Esse canal não existi
 | Situação                    | O que o "rastreador" faz                                      |
 |-----------------------------|---------------------------------------------------------------|
 | Parada (pátio/cliente)      | Fica no lugar, sem ruído, e manda sinal a cada segundo        |
-| `EM_ROTA`                   | Anda pelas ruas até o destino, como se estivesse no caminhão, e continua até o ponto mesmo depois de a chegada ser confirmada na borda da cerca |
+| `EM_ROTA`                   | Anda pelas ruas até o destino, como se estivesse no furgão, e continua até o ponto mesmo depois de a chegada ser confirmada na borda da cerca |
 | Cenário **VENDA**           | Alguém leva a bombona pelas ruas, de 4 a 9 km, numa direção aleatória, e para numa rua |
 | Cenário **DEVOLUÇÃO**       | A bombona volta pelas ruas para o local esperado              |
 | Cenário **SEM SINAL**       | O rastreador fica calado até passar o limite de sem sinal     |
 | Cenário **BATERIA FRACA**   | A bateria cai para 14%                                        |
-| Coleta registrada no painel | Quem estava com a bombona "perde" ela e o caminhão a leva ao pátio |
+| Coleta registrada no painel | Quem estava com a bombona "perde" ela e o furgão a leva ao pátio |
 | Chegada ao pátio            | O rastreador é recarregado (bateria em 100%) e manda uma leitura na hora |
 
 ## Variáveis
