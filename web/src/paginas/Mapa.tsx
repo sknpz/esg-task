@@ -14,7 +14,7 @@ import { PainelBombona } from './PainelBombona.tsx';
 type Filtro = Status | 'ALERTA' | null;
 
 const CIANORTE: [number, number] = [-23.66, -52.64];
-/** O zoom que costuma enquadrar todos os clientes: começar nele evita baixar tiles de outro zoom à toa. */
+/** Zoom de partida, em torno de Cianorte; `EnquadrarTudo` ajusta o enquadramento aos clientes (alguns chegam a Cascavel). Começar num zoom comum evita baixar tiles de outro zoom à toa. */
 const ZOOM_INICIAL = 10;
 const URL_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const LARGURA_PAINEL = 400;

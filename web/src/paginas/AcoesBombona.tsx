@@ -75,9 +75,7 @@ export function AcoesBombona({ bombona: b }: { bombona: Bombona }) {
         executar(() => api.coletar(b.codigo, recuperacao ? { observacao } : { litros: Number(litros), observacao }));
       }}
     >
-      <label className="acao__rotulo" htmlFor="obs-coleta">
-        {recuperacao ? 'Bombona encontrada? Registre a recuperação' : 'Coleta'}
-      </label>
+      <div className="acao__rotulo">{recuperacao ? 'Bombona encontrada? Registre a recuperação' : 'Coleta'}</div>
       {!recuperacao && (
         <>
           <label className="acao__rotulo" htmlFor="litros-coleta">
@@ -97,6 +95,9 @@ export function AcoesBombona({ bombona: b }: { bombona: Bombona }) {
           />
         </>
       )}
+      <label className="acao__rotulo" htmlFor="obs-coleta">
+        {recuperacao ? 'Onde estava?' : 'Observação'}
+      </label>
       <input
         id="obs-coleta"
         className="campo"
