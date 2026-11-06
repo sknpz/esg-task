@@ -8,7 +8,8 @@
  * de controle da demonstração (GET /api/simulacao/estado). Esse canal não existe num cenário real.
  */
 
-type Ponto = { lat: number; lng: number };
+import { comprimentoM, distanciaM, passoDaViagem, type Ponto } from './percurso.ts';
+
 type Local = Ponto & { nome: string; raioM: number };
 type Status = 'PATIO' | 'EM_ROTA' | 'EM_CLIENTE' | 'EXTRAVIADA';
 
@@ -34,7 +35,7 @@ type Aparelho = {
   caladoAte?: number;
   ticksParado: number;
   /** Caminho pelas ruas da viagem atual (pontos que ainda faltam). */
-  rota?: { chave: string; pontos: Ponto[] };
+  rota?: { chave: string; pontos: Ponto[]; passo: number };
   /** Busca de rota em andamento ou aguardando nova tentativa. */
   planejando?: { chave: string; ocupado: boolean; proximaEm: number };
 };
@@ -49,6 +50,8 @@ const TICK_MS = Number(process.env.SIM_TICK_MS) || 250;
 const TICKS_ENTRE_SINAIS_PARADA = Math.max(1, Math.round(1000 / TICK_MS));
 /** Quanto anda por tick (tempo da demonstração é acelerado): 100 m/s no caminhão, 73 m/s na venda. */
 const PASSO_CAMINHAO_M = (100 * TICK_MS) / 1000;
+/** Teto de duração de uma viagem do furgão: viagens longas aceleram para caber nele. */
+const DURACAO_MAX_VIAGEM_S = 90;
 const PASSO_VENDA_M = (73 * TICK_MS) / 1000;
 /** Consumo de bateria por tick, em pontos percentuais. */
 const CONSUMO_MOVIMENTO = (0.05 / 3000) * TICK_MS;
@@ -70,12 +73,6 @@ let silencioMs = 70_000;
 
 const M_POR_GRAU_LAT = 111_195;
 const mPorGrauLng = (lat: number) => M_POR_GRAU_LAT * Math.cos((lat * Math.PI) / 180);
-
-function distanciaM(a: Ponto, b: Ponto) {
-  const dy = (b.lat - a.lat) * M_POR_GRAU_LAT;
-  const dx = (b.lng - a.lng) * mPorGrauLng(a.lat);
-  return Math.hypot(dx, dy);
-}
 
 function deslocar(p: Ponto, norteM: number, lesteM: number): Ponto {
   return { lat: p.lat + norteM / M_POR_GRAU_LAT, lng: p.lng + lesteM / mPorGrauLng(p.lat) };
@@ -164,9 +161,14 @@ async function planejarViagem(ap: Aparelho, viagem: Viagem) {
   try {
     const pontos = await viagem.buscar();
     if (ap.planejando !== plano) return;
-    ap.rota = { chave: viagem.chave, pontos };
+    const doFurgao = viagem.chave.startsWith('caminhao:');
+    const passo = doFurgao
+      ? passoDaViagem(comprimentoM([ap.posicao, ...pontos]), viagem.passo, (DURACAO_MAX_VIAGEM_S * 1000) / TICK_MS)
+      : viagem.passo;
+    ap.rota = { chave: viagem.chave, pontos, passo };
     ap.planejando = undefined;
-    console.log(`[${ap.remoto.bombona}] rota até ${viagem.nome}: ${pontos.length} pontos pelas ruas`);
+    const veloc = passo > viagem.passo ? `; ${Math.round((passo * 1000) / TICK_MS)} m/s` : '';
+    console.log(`[${ap.remoto.bombona}] rota até ${viagem.nome}: ${pontos.length} pontos pelas ruas${veloc}`);
   } catch (e) {
     if (ap.planejando !== plano) return;
     plano.ocupado = false;
@@ -259,7 +261,7 @@ function mover(ap: Aparelho, viagem: Viagem | null) {
   const emViagem = viagem?.chave === rota.chave;
   if (!emViagem && viagem) return false;
   const andando = rota.pontos.length > 0;
-  if (seguir(ap, rota.pontos, viagem?.passo ?? PASSO_CAMINHAO_M)) {
+  if (seguir(ap, rota.pontos, rota.passo)) {
     if (emViagem && ap.devolvendo) ap.devolvendo = false;
     if (!viagem) ap.rota = undefined;
   }

@@ -12,7 +12,7 @@
     "build": "npm run build -w web",
     "start": "npm start -w server",
     "simular": "npm start -w simulator",
-    "test": "npm test -w server",
+    "test": "npm test -w server -w simulator",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
