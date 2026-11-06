@@ -15,6 +15,8 @@ export type LinhaBombona = {
   dispositivo_id: string;
   leituras_fora: number;
   atualizado_em: string;
+  /** Furgão em que viaja (NULL fora de furgão). */
+  roteiro_id: number | null;
   bateria: number | null;
   ultimo_sinal: string | null;
   lat: number | null;
@@ -85,6 +87,7 @@ export function paraDto(b: LinhaBombona, config: Config) {
     status: b.status,
     cliente: b.cliente_id === null ? null : { id: b.cliente_id, nome: b.cliente_nome!, cidade: b.cliente_cidade! },
     dispositivoId: b.dispositivo_id,
+    roteiroId: b.roteiro_id,
     posicao,
     bateria: b.bateria,
     ultimoSinal: b.ultimo_sinal,

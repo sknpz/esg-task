@@ -2,6 +2,7 @@ import { criarApp } from './app.ts';
 import { carregarConfig } from './config.ts';
 import { abrirBanco } from './db.ts';
 import { criarHubDeEventos } from './eventos.ts';
+import { avancarOperacao } from './operacao.ts';
 import { verificarSemSinal } from './regras.ts';
 import { popularSeVazio } from './seed.ts';
 
@@ -15,6 +16,15 @@ const app = criarApp(ctx);
 // RN10: varredura de dispositivos sem sinal.
 const intervaloVarredura = Math.max(1000, Math.min(config.semSinalSegundos * 1000, 60_000) / 3);
 setInterval(() => verificarSemSinal(ctx), intervaloVarredura).unref();
+
+// Relógio da operação simulada (manhã → rotas → fim do dia).
+setInterval(() => {
+  try {
+    avancarOperacao(ctx);
+  } catch (erro) {
+    console.error('Falha ao avançar a operação:', erro);
+  }
+}, 1000).unref();
 
 app.listen(config.porta, () => {
   console.log(`API do rastreio de bombonas em http://localhost:${config.porta}/api`);

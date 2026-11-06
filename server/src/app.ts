@@ -5,6 +5,7 @@ import type { Contexto } from './contexto.ts';
 import { rotasDeContratos } from './rotas/contratos.ts';
 import { rotasDeConsulta } from './rotas/consulta.ts';
 import { rotasDeOperacao } from './rotas/operacao.ts';
+import { rotasDeRoteiros } from './rotas/roteiros.ts';
 import { rotasDeSimulacao } from './rotas/simulacao.ts';
 import { rotasDeTelemetria } from './rotas/telemetria.ts';
 
@@ -16,6 +17,7 @@ export function criarApp(ctx: Contexto) {
   app.use('/api', rotasDeTelemetria(ctx));
   app.use('/api', rotasDeOperacao(ctx));
   app.use('/api', rotasDeContratos(ctx));
+  app.use('/api', rotasDeRoteiros(ctx));
   if (ctx.config.simulacaoAtiva) app.use('/api', rotasDeSimulacao(ctx));
 
   app.use('/api', (_req, res) => {

@@ -33,9 +33,15 @@ const SELECT = `SELECT k.id, k.cliente_id AS clienteId, c.nome, c.cidade, k.quan
                        k.dias_semana AS diasSemana, k.dia_mes AS diaMes, k.inicio, k.situacao
                 FROM contratos k JOIN clientes c ON c.id = k.cliente_id`;
 
-function paraDto(l: Linha, hoje: string): ContratoDto {
+/** Regra de calendário de uma linha de contrato (`dias_semana` guarda "1,3,5"). */
+export function regraDoContrato(l: { frequencia: Frequencia; diasSemana: string; diaMes: number | null; inicio: string }): RegraContrato {
   const diasSemana = l.diasSemana === '' ? [] : l.diasSemana.split(',').map(Number);
-  const regra: RegraContrato = { frequencia: l.frequencia, diasSemana, diaMes: l.diaMes, inicio: l.inicio };
+  return { frequencia: l.frequencia, diasSemana, diaMes: l.diaMes, inicio: l.inicio };
+}
+
+function paraDto(l: Linha, hoje: string): ContratoDto {
+  const regra = regraDoContrato(l);
+  const { diasSemana } = regra;
   return {
     id: l.id,
     clienteId: l.clienteId,

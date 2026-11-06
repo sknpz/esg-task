@@ -18,6 +18,9 @@ export type Config = {
   coletaHistoricoN: number;
   coletaMinimoPct: number;
   dataInicialOperacao: string;
+  furgaoCapacidade: number;
+  frotaMaxima: number;
+  fasePausaS: number;
   tokenSimulador: string;
   simulacaoAtiva: boolean;
 };
@@ -41,6 +44,11 @@ export function carregarConfig(): Config {
     coletaHistoricoN: num('COLETA_HISTORICO_N', 3),
     coletaMinimoPct: num('COLETA_MINIMO_PCT', 50),
     dataInicialOperacao: process.env.DATA_INICIAL_OPERACAO ?? '2026-11-09',
+    // RN23: bombonas por furgão e furgões por dia. Capacidade pequena para a divisão aparecer na demonstração.
+    furgaoCapacidade: num('FURGAO_CAPACIDADE', 8),
+    frotaMaxima: num('FROTA_MAXIMA', 4),
+    // Duração da manhã e do fim do dia simulados, em segundos.
+    fasePausaS: num('FASE_PAUSA_S', 5),
     tokenSimulador: process.env.SIM_TOKEN ?? 'sim-demo-token',
     // Canal de controle da demonstração; desligue com SIMULACAO=off.
     simulacaoAtiva: process.env.SIMULACAO !== 'off',

@@ -72,8 +72,9 @@ export function processarLeitura(ctx: Contexto, dispositivoId: string, leitura: 
 
     if (b.status === 'EM_ROTA') {
       // RN13: em rota não há cerca. RN04: chegada ao destino conclui a movimentação.
+      // Dentro de um furgão (roteiro), quem entrega é a troca na parada: passar pela cerca não muda nada.
       const alvo = destino(b, config)!;
-      if (dentroDaCerca(posicao, alvo, alvo.raioM, leitura.precisao)) {
+      if (b.roteiro_id === null && dentroDaCerca(posicao, alvo, alvo.raioM, leitura.precisao)) {
         novoStatus = b.cliente_id === null ? 'PATIO' : 'EM_CLIENTE';
         db.prepare('INSERT INTO movimentacoes (bombona_id, tipo, cliente_id, observacao, criado_em) VALUES (?, ?, ?, ?, ?)').run(
           b.id,
