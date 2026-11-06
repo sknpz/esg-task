@@ -11,10 +11,17 @@ export class ErroDeNegocio extends Error {
   }
 }
 
-const registrarMovimentacao = (ctx: Contexto, bombonaId: number, tipo: string, clienteId: number | null, observacao?: string) =>
+const registrarMovimentacao = (
+  ctx: Contexto,
+  bombonaId: number,
+  tipo: string,
+  clienteId: number | null,
+  observacao?: string,
+  litros: number | null = null,
+) =>
   ctx.db
-    .prepare('INSERT INTO movimentacoes (bombona_id, tipo, cliente_id, observacao, criado_em) VALUES (?, ?, ?, ?, ?)')
-    .run(bombonaId, tipo, clienteId, observacao?.trim() || null, agoraIso());
+    .prepare('INSERT INTO movimentacoes (bombona_id, tipo, cliente_id, observacao, litros, criado_em) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(bombonaId, tipo, clienteId, observacao?.trim() || null, litros, agoraIso());
 
 function exigirBombona(ctx: Contexto, codigo: string) {
   const b = linhaBombonaPorCodigo(ctx.db, codigo);
@@ -44,19 +51,28 @@ export function enviarParaCliente(ctx: Contexto, codigo: string, clienteId: numb
   return publicarBombona(ctx, b.id);
 }
 
-/** RN05: coleta normal (EM_CLIENTE) ou recuperação (EXTRAVIADA). A bombona volta ao pátio. */
-export function coletar(ctx: Contexto, codigo: string, observacao?: string) {
+/** RN05: coleta normal (EM_CLIENTE) ou recuperação (EXTRAVIADA). A bombona volta ao pátio. RN17: a coleta normal informa os litros. */
+export function coletar(ctx: Contexto, codigo: string, entrada: { litros?: unknown; observacao?: string } = {}) {
+  const { observacao } = entrada;
   const b = exigirBombona(ctx, codigo);
   if (b.status !== 'EM_CLIENTE' && b.status !== 'EXTRAVIADA') {
     throw new ErroDeNegocio(409, `Só é possível coletar bombonas em cliente ou extraviadas (status atual: ${b.status})`);
   }
   const recuperacao = b.status === 'EXTRAVIADA';
+  let litros: number | null = null;
+  if (!recuperacao) {
+    const informado = entrada.litros;
+    if (typeof informado !== 'number' || !Number.isInteger(informado) || informado < 0 || informado > b.capacidade_l) {
+      throw new ErroDeNegocio(400, `Informe os litros coletados: número inteiro de 0 a ${b.capacidade_l} L`);
+    }
+    litros = informado;
+  }
 
   const alertas = transacao(ctx.db, () => {
     ctx.db
       .prepare("UPDATE bombonas SET status = 'EM_ROTA', cliente_id = NULL, leituras_fora = 0, atualizado_em = ? WHERE id = ?")
       .run(agoraIso(), b.id);
-    registrarMovimentacao(ctx, b.id, recuperacao ? 'RECUPERACAO' : 'COLETA', b.cliente_id, observacao);
+    registrarMovimentacao(ctx, b.id, recuperacao ? 'RECUPERACAO' : 'COLETA', b.cliente_id, observacao, litros);
     return resolverAlertasDaBombona(ctx.db, b.id, ['FORA_DA_AREA', 'EXTRAVIO'], {
       por: 'OPERADOR',
       texto: observacao?.trim() || 'Bombona recolhida pela equipe de coleta',

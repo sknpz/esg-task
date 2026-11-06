@@ -22,7 +22,7 @@ export function rotasDeOperacao(ctx: Contexto) {
   });
 
   r.post('/bombonas/:codigo/coleta', (req, res) => {
-    responder(res, () => coletar(ctx, req.params.codigo, req.body?.observacao));
+    responder(res, () => coletar(ctx, req.params.codigo, { litros: req.body?.litros, observacao: req.body?.observacao }));
   });
 
   r.post('/alertas/:id/resolver', (req, res) => {

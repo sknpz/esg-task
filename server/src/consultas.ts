@@ -117,7 +117,7 @@ export function detalheBombona(db: Banco, config: Config, codigo: string) {
   if (!linha) return null;
   const movimentacoes = db
     .prepare(
-      `SELECT m.id, m.tipo, m.observacao, m.criado_em AS criadoEm, c.nome AS cliente
+      `SELECT m.id, m.tipo, m.observacao, m.litros, m.criado_em AS criadoEm, c.nome AS cliente
        FROM movimentacoes m LEFT JOIN clientes c ON c.id = m.cliente_id
        WHERE m.bombona_id = ? ORDER BY m.criado_em DESC, m.id DESC LIMIT 30`,
     )

@@ -40,7 +40,7 @@ describe('movimentações', () => {
   });
 
   it('coleta uma bombona em cliente e conclui o retorno ao chegar no pátio (RN05, RN04)', async () => {
-    const { corpo } = await post('/bombonas/BO-0002/coleta', { observacao: 'Coleta semanal' });
+    const { corpo } = await post('/bombonas/BO-0002/coleta', { litros: 40, observacao: 'Coleta semanal' });
     assert.equal(corpo.status, 'EM_ROTA');
     assert.equal(corpo.destino.nome, 'Pátio Bio Óleo');
     await telemetria('BO-0002', { lat: ctx.config.patio.lat, lng: ctx.config.patio.lng });
@@ -50,6 +50,18 @@ describe('movimentações', () => {
       detalhe.movimentacoes.slice(0, 2).map((m: any) => m.tipo),
       ['RETORNO_AO_PATIO', 'COLETA'],
     );
+  });
+
+  it('coleta normal exige litros inteiros entre 0 e a capacidade (RN17)', async () => {
+    for (const litros of [undefined, '42', 42.5, -1, 51]) // BO-0001 é de 50 L
+      assert.equal((await post('/bombonas/BO-0001/coleta', { litros })).status, 400);
+    assert.equal((await get('/bombonas/BO-0001')).status, 'EM_CLIENTE'); // nada foi registrado
+  });
+
+  it('guarda os litros na movimentação de coleta', async () => {
+    await post('/bombonas/BO-0004/coleta', { litros: 38 });
+    const [mov] = (await get('/bombonas/BO-0004')).movimentacoes;
+    assert.deepEqual([mov.tipo, mov.litros], ['COLETA', 38]);
   });
 
   it('recupera uma bombona extraviada e fecha os alertas como operador', async () => {
@@ -63,6 +75,7 @@ describe('movimentações', () => {
     assert.equal(corpo.status, 'EM_ROTA');
     const detalhe = await get('/bombonas/BO-0003');
     assert.equal(detalhe.movimentacoes[0].tipo, 'RECUPERACAO');
+    assert.equal(detalhe.movimentacoes[0].litros, null);
     const daOcorrencia = detalhe.alertas.filter((a: any) => ['FORA_DA_AREA', 'EXTRAVIO'].includes(a.tipo) && a.resolucao === 'Achada no ferro-velho');
     assert.equal(daOcorrencia.length, 2);
     assert.ok(daOcorrencia.every((a: any) => a.resolvidoPor === 'OPERADOR'));
