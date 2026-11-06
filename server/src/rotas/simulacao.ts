@@ -5,6 +5,7 @@ import type { Contexto } from '../contexto.ts';
 import { caiNaData, proximoDiaOperacao } from '../calendario.ts';
 import { dataOperacao, regraDoContrato } from '../contratos.ts';
 import { agoraIso, transacao, type Banco } from '../db.ts';
+import { estadoOperacao } from '../operacao.ts';
 import { litrosEsperados } from '../rendimento.ts';
 
 export const CENARIOS = ['VENDA', 'DEVOLUCAO', 'SEM_SINAL', 'BATERIA_FRACA', 'VENDA_SILENCIOSA'] as const;
@@ -46,6 +47,19 @@ function escolherParaVendaSilenciosa(db: Banco, hoje: string): { id: number; cod
 export function exigirTokenSimulador(config: Config): RequestHandler {
   return (req, res, next) => {
     if (req.get('authorization') !== `Bearer ${config.tokenSimulador}`) return void res.status(401).json({ erro: 'Não autorizado' });
+    next();
+  };
+}
+
+/**
+ * Recusa o pedido de uma rodada que já acabou (a simulação foi reiniciada). Sem `X-Rodada` segue: o hardware real
+ * não manda o cabeçalho. Quem manda é o simulador, com a rodada que ele conhece.
+ */
+export function exigirRodadaAtual(ctx: Contexto): RequestHandler {
+  return (req, res, next) => {
+    const enviada = req.get('x-rodada');
+    if (enviada === undefined) return next();
+    if (Number(enviada) !== estadoOperacao(ctx).rodada) return void res.status(409).json({ erro: 'Rodada encerrada: a simulação foi reiniciada' });
     next();
   };
 }

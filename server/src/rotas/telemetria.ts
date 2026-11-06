@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { Contexto } from '../contexto.ts';
+import { exigirRodadaAtual } from './simulacao.ts';
 import { processarLeitura, type Leitura } from '../regras.ts';
 
 /** Tolerância para relógio adiantado do dispositivo. */
@@ -30,7 +31,7 @@ export function rotasDeTelemetria(ctx: Contexto) {
   const r = Router();
 
   // RN16: o dispositivo se identifica pelo token.
-  r.post('/telemetria', (req, res) => {
+  r.post('/telemetria', exigirRodadaAtual(ctx), (req, res) => {
     const token = req.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
     const dispositivo = token
       ? (ctx.db.prepare('SELECT id FROM dispositivos WHERE token = ?').get(token) as { id: string } | undefined)

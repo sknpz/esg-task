@@ -339,21 +339,31 @@ const paraEstado = (l: LinhaOperacao, config: Config): EstadoOperacao => ({
 /** Início da pausa em andamento, por banco. Em memória: depois de reiniciar, continuar recomeça a fase. */
 const inicioDaPausa = new WeakMap<Banco, number>();
 
+/** Esquece a pausa em andamento (o reset zera o relógio; a pausa antiga não vale para a rodada nova). */
+export const esquecerPausa = (db: Banco) => void inicioDaPausa.delete(db);
+
 /**
- * Estado do relógio. Na primeira chamada cria a operação na data inicial, de manhã, e já planeja esse dia
- * (a manhã planeja ao começar).
+ * Cria a operação da rodada: data inicial, de manhã, pausada, 1x, e já planeja esse dia (a manhã planeja ao
+ * começar). Sem eventos: quem chama decide o que publicar.
  */
+export function criarOperacao(ctx: Contexto, rodada: number): EstadoOperacao {
+  const data = ctx.config.dataInicialOperacao;
+  transacao(ctx.db, () => {
+    ctx.db
+      .prepare("INSERT INTO operacao (id, data, fase, fase_desde, pausado, velocidade, rodada) VALUES (1, ?, 'MANHA', ?, 1, 1, ?)")
+      .run(data, agoraIso(), rodada);
+    planejar(ctx, data);
+  });
+  return paraEstado(lerLinha(ctx.db)!, ctx.config);
+}
+
+/** Estado do relógio. Na primeira chamada cria a operação (rodada 1). */
 export function estadoOperacao(ctx: Contexto): EstadoOperacao {
   const atual = lerLinha(ctx.db);
   if (atual) return paraEstado(atual, ctx.config);
-  const data = ctx.config.dataInicialOperacao;
-  transacao(ctx.db, () => {
-    ctx.db.prepare("INSERT INTO operacao (id, data, fase, fase_desde, pausado) VALUES (1, ?, 'MANHA', ?, 1)").run(data, agoraIso());
-    planejar(ctx, data);
-  });
-  const estado = paraEstado(lerLinha(ctx.db)!, ctx.config);
+  const estado = criarOperacao(ctx, 1);
   ctx.eventos.emitir({ tipo: 'operacao', dados: estado });
-  publicarRoteiros(ctx, data);
+  publicarRoteiros(ctx, estado.data);
   return estado;
 }
 
@@ -690,7 +700,7 @@ function publicarRoteiro(ctx: Contexto, roteiroId: number): RoteiroDto {
   return dto;
 }
 
-function publicarRoteiros(ctx: Contexto, data: string) {
+export function publicarRoteiros(ctx: Contexto, data: string) {
   for (const r of roteirosDoDia(ctx.db, ctx.config, data).roteiros) ctx.eventos.emitir({ tipo: 'roteiro', dados: r });
 }
 
