@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { destino, linhaBombonaPorCodigo, localEsperado, type LinhaBombona } from '../consultas.ts';
 import type { Contexto } from '../contexto.ts';
+import { dataOperacao } from '../contratos.ts';
 import { agoraIso, transacao } from '../db.ts';
+import { litrosEsperados } from '../rendimento.ts';
 
 export const CENARIOS = ['VENDA', 'DEVOLUCAO', 'SEM_SINAL', 'BATERIA_FRACA'] as const;
 
@@ -45,7 +47,38 @@ export function rotasDeSimulacao(ctx: Contexto) {
         .all(agoraIso()),
     );
 
+    const pausado = db.prepare('SELECT pausado FROM operacao WHERE id = 1').get() as { pausado: number } | undefined;
+    const operacao = { data: dataOperacao(ctx), pausado: pausado?.pausado === 1 };
+
+    // Furgões na rua: o simulador faz as paradas e gera os litros em torno do esperado de cada cliente.
+    const paradasDo = db.prepare(
+      `SELECT p.id, p.ordem, p.status, p.cliente_id AS clienteId, c.nome, c.lat, c.lng
+       FROM paradas p JOIN clientes c ON c.id = p.cliente_id WHERE p.roteiro_id = ? ORDER BY p.ordem`,
+    );
+    // As bombonas que a troca vai procurar no cliente (as mesmas da RN21/RN22).
+    const capacidadesDo = db.prepare(
+      "SELECT capacidade_l FROM bombonas WHERE cliente_id = ? AND status IN ('EM_CLIENTE', 'EXTRAVIADA') AND roteiro_id IS NULL ORDER BY codigo",
+    );
+    const noFurgao = db.prepare('SELECT codigo FROM bombonas WHERE roteiro_id = ? ORDER BY codigo');
+    const emAndamento = db
+      .prepare("SELECT id, numero FROM roteiros WHERE status = 'EM_ANDAMENTO' ORDER BY data, numero")
+      .all() as Array<{ id: number; numero: number }>;
+    const roteiros = emAndamento.map((r) => ({
+      id: r.id,
+      numero: r.numero,
+      paradas: (paradasDo.all(r.id) as Array<{ id: number; ordem: number; status: string; clienteId: number; nome: string; lat: number; lng: number }>).map(
+        (p) => ({
+          ...p,
+          litrosEsperados: litrosEsperados(db, p.clienteId, config.coletaHistoricoN),
+          capacidades: (capacidadesDo.all(p.clienteId) as Array<{ capacidade_l: number }>).map((b) => b.capacidade_l),
+        }),
+      ),
+      bombonas: (noFurgao.all(r.id) as Array<{ codigo: string }>).map((b) => b.codigo),
+    }));
+
     res.json({
+      operacao,
+      roteiros,
       dispositivos: bombonas.map((b) => ({
         dispositivoId: b.dispositivo_id,
         token: b.token,
@@ -55,6 +88,8 @@ export function rotasDeSimulacao(ctx: Contexto) {
         bateria: b.bateria,
         // Onde o "furgão" leva a bombona em rota, ou onde ela deveria estar parada.
         alvo: destino(b, config) ?? localEsperado(b, config),
+        roteiroId: b.roteiro_id,
+        clienteId: b.cliente_id,
       })),
       comandos,
     });

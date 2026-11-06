@@ -158,13 +158,25 @@ export function trilha(db: Banco, bombonaId: number, limite = 200) {
 
 export const nivelRisco = (incidentes: number) => (incidentes >= 3 ? 'ALTO' : incidentes >= 1 ? 'MEDIO' : 'BAIXO');
 
+/**
+ * RN14 e RN22: incidentes de cada cliente. Saída da cerca (sem contar a reaberta na mesma saída) e bombona não
+ * encontrada na parada sem o rastreador ter visto o sumiço.
+ */
+const INCIDENTES = `
+  incidentes AS (
+    SELECT cliente_id, aberto_em AS em FROM alertas WHERE tipo = 'FORA_DA_AREA' AND reaberto = 0
+    UNION ALL
+    SELECT cliente_id, criado_em AS em FROM movimentacoes WHERE tipo = 'NAO_ENCONTRADA' AND incidente = 1
+  )`;
+
 export function listarClientes(db: Banco) {
   const linhas = db
     .prepare(
-      `SELECT c.id, c.nome, c.tipo, c.cidade, c.endereco, c.lat, c.lng, c.raio_m AS raioM,
+      `WITH ${INCIDENTES}
+       SELECT c.id, c.nome, c.tipo, c.cidade, c.endereco, c.lat, c.lng, c.raio_m AS raioM,
               (SELECT COUNT(*) FROM bombonas b WHERE b.cliente_id = c.id AND b.status IN ('EM_CLIENTE', 'EXTRAVIADA')) AS bombonas,
-              (SELECT COUNT(*) FROM alertas a WHERE a.cliente_id = c.id AND a.tipo = 'FORA_DA_AREA' AND a.reaberto = 0) AS incidentes,
-              (SELECT MAX(a.aberto_em) FROM alertas a WHERE a.cliente_id = c.id AND a.tipo = 'FORA_DA_AREA' AND a.reaberto = 0) AS ultimoIncidente,
+              (SELECT COUNT(*) FROM incidentes i WHERE i.cliente_id = c.id) AS incidentes,
+              (SELECT MAX(i.em) FROM incidentes i WHERE i.cliente_id = c.id) AS ultimoIncidente,
               EXISTS (SELECT 1 FROM contratos k WHERE k.cliente_id = c.id AND k.situacao = 'ATIVO') AS contratoAtivo
        FROM clientes c ORDER BY incidentes DESC, c.nome`,
     )

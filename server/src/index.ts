@@ -2,7 +2,7 @@ import { criarApp } from './app.ts';
 import { carregarConfig } from './config.ts';
 import { abrirBanco } from './db.ts';
 import { criarHubDeEventos } from './eventos.ts';
-import { avancarOperacao } from './operacao.ts';
+import { avancarOperacao, retomarAposReinicio } from './operacao.ts';
 import { verificarSemSinal } from './regras.ts';
 import { popularSeVazio } from './seed.ts';
 
@@ -12,6 +12,13 @@ if (popularSeVazio(db, config)) console.log('Banco criado com dados fictícios.'
 
 const ctx = { db, config, eventos: criarHubDeEventos() };
 const app = criarApp(ctx);
+
+// Furgão que estava na rua quando o servidor caiu: conclui o roteiro na hora, sem animação.
+try {
+  retomarAposReinicio(ctx);
+} catch (erro) {
+  console.error('Falha ao concluir os roteiros interrompidos:', erro);
+}
 
 // RN10: varredura de dispositivos sem sinal.
 const intervaloVarredura = Math.max(1000, Math.min(config.semSinalSegundos * 1000, 60_000) / 3);

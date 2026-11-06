@@ -1,13 +1,16 @@
 // Operação do dia: relógio simulado (manhã → rotas → fim do dia), planejamento das coletas e saída dos furgões.
 // RN20 (coletas do dia), RN23 (capacidade e frota), RN24 (estoque do pátio).
 
+import { abrirAlerta } from './alertas.ts';
 import { caiNaData, diaDaSemana, proximoDiaOperacao, type Frequencia } from './calendario.ts';
 import type { Config } from './config.ts';
-import { bombonaDto } from './consultas.ts';
+import { bombonaDto, linhaBombonaPorId, type LinhaBombona } from './consultas.ts';
 import type { Contexto } from './contexto.ts';
 import { regraDoContrato } from './contratos.ts';
 import { agoraIso, transacao, type Banco } from './db.ts';
 import type { Ponto } from './geo.ts';
+import { coletarEmTransacao, ErroDeNegocio } from './operacoes.ts';
+import { litrosEsperados } from './rendimento.ts';
 import { dividirEmRoteiros, type ParadaPlano } from './roteirizacao.ts';
 
 export type Fase = 'MANHA' | 'ROTAS' | 'FIM';
@@ -382,7 +385,255 @@ export function continuar(ctx: Contexto, agora = Date.now()): EstadoOperacao {
   return estado;
 }
 
+// ---------------------------------------------------------------- troca na parada (RN21, RN22)
+
+const NAO_PASSOU = 'o furgão encerrou a rota antes desta parada';
+
+type LinhaStatusRoteiro = { id: number; data: string; status: StatusRoteiro };
+
+function exigirRoteiro(db: Banco, roteiroId: number): LinhaStatusRoteiro {
+  const r = db.prepare('SELECT id, data, status FROM roteiros WHERE id = ?').get(roteiroId) as LinhaStatusRoteiro | undefined;
+  if (!r) throw new ErroDeNegocio(404, 'Roteiro não encontrado');
+  return r;
+}
+
+function exigirEmAndamento(db: Banco, roteiroId: number): LinhaStatusRoteiro {
+  const r = exigirRoteiro(db, roteiroId);
+  if (r.status !== 'EM_ANDAMENTO') throw new ErroDeNegocio(409, `O roteiro não está em andamento (status atual: ${r.status})`);
+  return r;
+}
+
+const paradaPorId = (db: Banco, id: number) => db.prepare(`${SELECT_PARADA} WHERE p.id = ?`).get(id) as LinhaParada | undefined;
+
+/** Bombonas que a troca procura no cliente: as dele, paradas lá ou já dadas como extraviadas. */
+const antigasDoCliente = (db: Banco, clienteId: number) =>
+  (
+    db
+      .prepare(
+        "SELECT id FROM bombonas WHERE cliente_id = ? AND status IN ('EM_CLIENTE', 'EXTRAVIADA') AND roteiro_id IS NULL ORDER BY codigo",
+      )
+      .all(clienteId) as Array<{ id: number }>
+  ).map(({ id }) => linhaBombonaPorId(db, id)!);
+
+/**
+ * RN22: a não encontrada conta incidente só se o sumiço ainda não foi visto desde a última vez que ela foi deixada
+ * nesse cliente (sem entrega registrada, desde sempre): nem pelo rastreador (FORA_DA_AREA) nem por uma parada
+ * anterior (NAO_ENCONTRADA), para o mesmo sumiço não contar duas vezes.
+ */
+function contaIncidente(db: Banco, bombonaId: number, clienteId: number): boolean {
+  const { entrega } = db
+    .prepare(
+      `SELECT COALESCE(MAX(criado_em), '') AS entrega FROM movimentacoes
+       WHERE bombona_id = ? AND cliente_id = ? AND tipo = 'ENTREGA_CONCLUIDA'`,
+    )
+    .get(bombonaId, clienteId) as { entrega: string };
+  const visto = db
+    .prepare(
+      `SELECT 1 FROM alertas WHERE bombona_id = ? AND tipo = 'FORA_DA_AREA' AND aberto_em >= ?
+       UNION ALL
+       SELECT 1 FROM movimentacoes WHERE bombona_id = ? AND tipo = 'NAO_ENCONTRADA' AND criado_em >= ?
+       LIMIT 1`,
+    )
+    .get(bombonaId, entrega, bombonaId, entrega);
+  return !visto;
+}
+
+type Encontradas = { encontradas: { codigo: string; litros: number }[] };
+
+/** Litros informados por código; valida a forma da entrada (400). */
+function lerEncontradas(entrada: Encontradas): Map<string, unknown> {
+  const lista: unknown = (entrada as { encontradas?: unknown } | null | undefined)?.encontradas;
+  if (!Array.isArray(lista)) throw new ErroDeNegocio(400, 'encontradas deve ser uma lista de { codigo, litros }');
+  const porCodigo = new Map<string, unknown>();
+  for (const item of lista as unknown[]) {
+    const codigo = (item as { codigo?: unknown } | null)?.codigo;
+    if (typeof codigo !== 'string' || !codigo.trim()) throw new ErroDeNegocio(400, 'Cada bombona encontrada precisa do código');
+    const chave = codigo.trim().toUpperCase();
+    if (!porCodigo.has(chave)) porCodigo.set(chave, (item as { litros?: unknown }).litros);
+  }
+  return porCodigo;
+}
+
+/**
+ * RN21: a troca na parada. Leva as bombonas do cliente encontradas (coleta com litros, RN17/RN18), registra as não
+ * encontradas (RN22) e deixa as vazias que o furgão trouxe para o cliente. Tudo ou nada.
+ */
+export function registrarTroca(ctx: Contexto, roteiroId: number, paradaId: number, entrada: Encontradas): ParadaDto {
+  const { db } = ctx;
+  const tocadas = new Set<number>();
+  const alertas: unknown[] = [];
+
+  const parada = transacao(db, () => {
+    exigirEmAndamento(db, roteiroId);
+    const p = paradaPorId(db, paradaId);
+    if (!p || p.roteiro_id !== roteiroId) throw new ErroDeNegocio(404, 'Parada não encontrada neste roteiro');
+    if (p.status !== 'PENDENTE') throw new ErroDeNegocio(409, `Parada já ${p.status === 'FEITA' ? 'feita' : 'não atendida'}`);
+
+    const informadas = lerEncontradas(entrada);
+    const antigas = antigasDoCliente(db, p.cliente_id);
+    const encontrada = (b: LinhaBombona) => b.status === 'EM_CLIENTE' && informadas.has(b.codigo);
+
+    // RN17: valida todos os litros antes de mexer em qualquer coisa.
+    const litrosDe = new Map<number, number>();
+    for (const b of antigas.filter(encontrada)) {
+      const litros = informadas.get(b.codigo);
+      if (typeof litros !== 'number' || !Number.isInteger(litros) || litros < 0 || litros > b.capacidade_l) {
+        throw new ErroDeNegocio(400, `Litros de ${b.codigo}: número inteiro de 0 a ${b.capacidade_l} L`);
+      }
+      litrosDe.set(b.id, litros);
+    }
+
+    const agora = agoraIso();
+    const resultado: ResultadoParada = { deixadas: [], levadas: [], naoEncontradas: [] };
+    const naoEncontrada = db.prepare(
+      "INSERT INTO movimentacoes (bombona_id, tipo, cliente_id, observacao, incidente, criado_em) VALUES (?, 'NAO_ENCONTRADA', ?, ?, ?, ?)",
+    );
+    const extraviar = db.prepare("UPDATE bombonas SET status = 'EXTRAVIADA', atualizado_em = ? WHERE id = ?");
+
+    for (const b of antigas) {
+      tocadas.add(b.id);
+      if (encontrada(b)) {
+        const litros = litrosDe.get(b.id)!;
+        alertas.push(...coletarEmTransacao(ctx, b, { litros, observacao: 'Levada na troca', roteiroId }));
+        resultado.levadas.push({ codigo: b.codigo, litros });
+        continue;
+      }
+      const incidente = contaIncidente(db, b.id, p.cliente_id);
+      naoEncontrada.run(b.id, p.cliente_id, 'Não encontrada na troca', Number(incidente), agora);
+      if (b.status !== 'EXTRAVIADA') extraviar.run(agora, b.id);
+      alertas.push(
+        abrirAlerta(db, {
+          bombonaId: b.id,
+          clienteId: p.cliente_id,
+          tipo: 'EXTRAVIO',
+          severidade: 'CRITICO',
+          mensagem: `Não encontrada na coleta de ${p.nome}`,
+          em: agora,
+        }),
+      );
+      resultado.naoEncontradas.push({ codigo: b.codigo, incidente });
+    }
+
+    // As vazias que o furgão trouxe para este cliente (a retirada não traz nenhuma).
+    const vazias = db
+      .prepare('SELECT id, codigo FROM bombonas WHERE roteiro_id = ? AND cliente_id = ? ORDER BY codigo')
+      .all(roteiroId, p.cliente_id) as Array<{ id: number; codigo: string }>;
+    const deixar = db.prepare(
+      "UPDATE bombonas SET status = 'EM_CLIENTE', roteiro_id = NULL, leituras_fora = 0, atualizado_em = ? WHERE id = ?",
+    );
+    const entrega = db.prepare(
+      "INSERT INTO movimentacoes (bombona_id, tipo, cliente_id, observacao, criado_em) VALUES (?, 'ENTREGA_CONCLUIDA', ?, 'Deixada na troca', ?)",
+    );
+    for (const v of vazias) {
+      deixar.run(agora, v.id);
+      entrega.run(v.id, p.cliente_id, agora);
+      tocadas.add(v.id);
+      resultado.deixadas.push(v.codigo);
+    }
+
+    db.prepare("UPDATE paradas SET status = 'FEITA', resultado = ?, feita_em = ? WHERE id = ?").run(JSON.stringify(resultado), agora, p.id);
+    return paradaDto(paradaPorId(db, p.id)!);
+  });
+
+  publicarBombonas(ctx, [...tocadas]);
+  for (const alerta of alertas) if (alerta) ctx.eventos.emitir({ tipo: 'alerta', dados: alerta });
+  publicarRoteiro(ctx, roteiroId);
+  return parada;
+}
+
+/**
+ * O furgão voltou ao pátio: paradas que ficaram para trás viram não atendidas, as cheias são descarregadas e as
+ * vazias que sobraram voltam ao estoque. Nenhuma bombona continua presa ao roteiro.
+ */
+export function concluirRoteiro(ctx: Contexto, roteiroId: number): RoteiroDto {
+  const { db } = ctx;
+  const devolvidas = transacao(db, () => {
+    exigirEmAndamento(db, roteiroId);
+    const agora = agoraIso();
+    db.prepare("UPDATE paradas SET status = 'NAO_ATENDIDA', resultado = ? WHERE roteiro_id = ? AND status = 'PENDENTE'").run(
+      JSON.stringify(naoAtendida(NAO_PASSOU)),
+      roteiroId,
+    );
+    const noFurgao = db.prepare('SELECT id, cliente_id AS clienteId FROM bombonas WHERE roteiro_id = ? ORDER BY codigo').all(roteiroId) as Array<{
+      id: number;
+      clienteId: number | null;
+    }>;
+    const descarregar = db.prepare(
+      "UPDATE bombonas SET status = 'PATIO', cliente_id = NULL, roteiro_id = NULL, leituras_fora = 0, atualizado_em = ? WHERE id = ?",
+    );
+    const retorno = db.prepare(
+      "INSERT INTO movimentacoes (bombona_id, tipo, cliente_id, observacao, criado_em) VALUES (?, 'RETORNO_AO_PATIO', NULL, ?, ?)",
+    );
+    for (const b of noFurgao) {
+      descarregar.run(agora, b.id);
+      retorno.run(b.id, b.clienteId === null ? 'Descarregada no pátio' : 'Voltou ao pátio sem ser deixada', agora);
+    }
+    db.prepare("UPDATE roteiros SET status = 'CONCLUIDO', concluido_em = ? WHERE id = ?").run(agora, roteiroId);
+    return noFurgao.map((b) => b.id);
+  });
+  publicarBombonas(ctx, devolvidas);
+  return publicarRoteiro(ctx, roteiroId);
+}
+
+const numeroFinito = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** Desenho do roteiro pelas ruas (uma consulta OSRM do simulador) e a distância total. */
+export function registrarTrajeto(ctx: Contexto, roteiroId: number, entrada: { pontos: [number, number][]; distanciaM: number }): RoteiroDto {
+  const { pontos, distanciaM } = (entrada ?? {}) as { pontos?: unknown; distanciaM?: unknown };
+  const valido =
+    Array.isArray(pontos) &&
+    pontos.length >= 2 &&
+    pontos.every((pt) => Array.isArray(pt) && pt.length === 2 && numeroFinito(pt[0]) && numeroFinito(pt[1]));
+  if (!valido) throw new ErroDeNegocio(400, 'pontos deve ser uma lista de pelo menos 2 pares [lat, lng]');
+  if (!numeroFinito(distanciaM) || distanciaM < 0) throw new ErroDeNegocio(400, 'distanciaM deve ser um número maior ou igual a 0');
+  const r = exigirRoteiro(ctx.db, roteiroId);
+  if (r.status === 'CONCLUIDO') throw new ErroDeNegocio(409, 'O roteiro já foi concluído');
+  ctx.db.prepare('UPDATE roteiros SET trajeto = ?, distancia_m = ? WHERE id = ?').run(JSON.stringify(pontos), distanciaM, roteiroId);
+  return publicarRoteiro(ctx, roteiroId);
+}
+
+/** Posição atual do furgão. */
+export function registrarPosicao(ctx: Contexto, roteiroId: number, entrada: { lat: number; lng: number }): RoteiroDto {
+  const { lat, lng } = (entrada ?? {}) as { lat?: unknown; lng?: unknown };
+  if (!numeroFinito(lat) || !numeroFinito(lng)) throw new ErroDeNegocio(400, 'lat e lng devem ser números');
+  exigirEmAndamento(ctx.db, roteiroId);
+  ctx.db.prepare('UPDATE roteiros SET lat = ?, lng = ? WHERE id = ?').run(lat, lng, roteiroId);
+  return publicarRoteiro(ctx, roteiroId);
+}
+
+/**
+ * Servidor reiniciado com furgão na rua: as paradas restantes são feitas como se o furgão tivesse passado (todas
+ * as bombonas em cliente encontradas, litros no esperado do cliente ou 70% da capacidade) e o roteiro é concluído.
+ * Sem roteiro em andamento, não faz nada.
+ */
+export function retomarAposReinicio(ctx: Contexto): void {
+  const { db, config } = ctx;
+  const emAndamento = db.prepare("SELECT id FROM roteiros WHERE status = 'EM_ANDAMENTO' ORDER BY data, numero").all() as Array<{ id: number }>;
+  for (const { id } of emAndamento) {
+    const pendentes = db
+      .prepare("SELECT id, cliente_id AS clienteId FROM paradas WHERE roteiro_id = ? AND status = 'PENDENTE' ORDER BY ordem")
+      .all(id) as Array<{ id: number; clienteId: number }>;
+    for (const p of pendentes) {
+      const esperado = litrosEsperados(db, p.clienteId, config.coletaHistoricoN);
+      const encontradas = antigasDoCliente(db, p.clienteId)
+        .filter((b) => b.status === 'EM_CLIENTE')
+        .map((b) => ({
+          codigo: b.codigo,
+          litros: Math.max(0, Math.min(b.capacidade_l, Math.round(esperado ?? b.capacidade_l * 0.7))),
+        }));
+      registrarTroca(ctx, id, p.id, { encontradas });
+    }
+    concluirRoteiro(ctx, id);
+  }
+}
+
 // ---------------------------------------------------------------- eventos
+
+function publicarRoteiro(ctx: Contexto, roteiroId: number): RoteiroDto {
+  const dto = roteiroDto(ctx.db, ctx.config, roteiroId)!;
+  ctx.eventos.emitir({ tipo: 'roteiro', dados: dto });
+  return dto;
+}
 
 function publicarRoteiros(ctx: Contexto, data: string) {
   for (const r of roteirosDoDia(ctx.db, ctx.config, data).roteiros) ctx.eventos.emitir({ tipo: 'roteiro', dados: r });
