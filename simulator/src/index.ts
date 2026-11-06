@@ -12,6 +12,7 @@
 
 import { consultarOsrm, criarFrota, type RoteiroRemoto } from './furgoes.ts';
 import { comprimentoM, distanciaM, M_POR_GRAU_LAT, mPorGrauLng, passoDaViagem, type Ponto } from './percurso.ts';
+import { consumoDeBateria, estenderSilencio, rodadaMudou, silencioDoCenarioMs } from './relogio.ts';
 
 type Local = Ponto & { nome: string; raioM: number };
 type Status = 'PATIO' | 'EM_ROTA' | 'EM_CLIENTE' | 'EXTRAVIADA';
@@ -32,7 +33,7 @@ type DispositivoRemoto = {
 };
 type Comando = { id: number; bombona: string; tipo: 'VENDA' | 'DEVOLUCAO' | 'SEM_SINAL' | 'BATERIA_FRACA' | 'VENDA_SILENCIOSA' };
 type Estado = {
-  operacao: { data: string; pausado: boolean };
+  operacao: { data: string; pausado: boolean; velocidade: 1 | 2; rodada: number };
   roteiros: RoteiroRemoto[];
   dispositivos: DispositivoRemoto[];
   comandos: Comando[];
@@ -79,9 +80,6 @@ const DURACAO_ROTEIRO_S = numeroDoAmbiente('SIM_DURACAO_ROTEIRO_S', 90);
 /** Pausa do furgão em cada parada, para a troca ficar visível. */
 const PAUSA_PARADA_MS = numeroDoAmbiente('SIM_PAUSA_PARADA_MS', 1000);
 const PASSO_VENDA_M = (73 * TICK_MS) / 1000;
-/** Consumo de bateria por tick, em pontos percentuais. */
-const CONSUMO_MOVIMENTO = (0.05 / 3000) * TICK_MS;
-const CONSUMO_PARADA = (0.01 / 3000) * TICK_MS;
 /** Serviço de rotas (OSRM). Toda viagem anda pelas ruas: sem resposta dele, a bombona espera e tenta de novo. */
 const ROTEADOR = process.env.ROTEADOR_URL ?? 'https://router.project-osrm.org';
 const ESPERA_ENTRE_TENTATIVAS_MS = 2000;
@@ -96,12 +94,20 @@ const VENDA_SORTEIOS = 5;
 const VENDAS_POR_DIA = numeroDoAmbiente('SIM_VENDAS_POR_DIA', 0.4);
 
 const aparelhos = new Map<string, Aparelho>();
-let silencioMs = 70_000;
+/** Prazo de "sem sinal" do servidor (/configuracao); o silêncio do cenário depende dele e da velocidade atual. */
+let semSinalSegundos = 45;
+let patio: Ponto = { lat: -23.66, lng: -52.6 };
 /** Último estado dos dispositivos vindo do servidor (na ordem dos códigos). */
 let dispositivos: DispositivoRemoto[] = [];
 /** Data de operação vista no ciclo anterior: a venda do dia é sorteada quando ela muda. */
 let dataVista: string | undefined;
+/** Velocidade do ciclo em andamento (1x ou 2x). */
+let velocidadeAtual = 1;
 let frota: ReturnType<typeof criarFrota>;
+/** Rodada vista no ciclo anterior: um reset da simulação a muda e o simulador recomeça do zero. */
+let rodadaAtual: number | undefined;
+/** Instante do ciclo anterior: o tempo real decorrido estende o silêncio enquanto pausado. */
+let ultimoTickEm = Date.now();
 
 // ---------- geometria ----------
 
@@ -204,16 +210,17 @@ async function planejarViagem(ap: Aparelho, viagem: Viagem) {
 }
 
 /** Exatamente o que um rastreador real enviaria (docs/contrato-dispositivo.md). */
-async function enviarLeitura(ap: Aparelho, emMovimento: boolean) {
+async function enviarLeitura(ap: Aparelho, emMovimento: boolean, rodada: number) {
   // Sem ruído de GPS: leituras frequentes fariam o pino tremer e a trilha sair da rua.
   const { lat, lng } = ap.posicao;
   const precisao = emMovimento ? 15 : 6 + Math.random() * 6;
   const r = await fetch(`${API}/telemetria`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ap.remoto.token}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ap.remoto.token}`, 'X-Rodada': String(rodada) },
     body: JSON.stringify({ lat, lng, precisao: Math.round(precisao), bateria: Math.round(ap.bateria * 10) / 10, registradoEm: new Date().toISOString() }),
   });
-  if (r.status !== 202) console.warn(`[${ap.remoto.bombona}] leitura recusada: HTTP ${r.status} ${await r.text()}`);
+  // 409: pedido de uma rodada que já acabou (a simulação foi reiniciada); não há o que reclamar.
+  if (r.status !== 202 && r.status !== 409) console.warn(`[${ap.remoto.bombona}] leitura recusada: HTTP ${r.status} ${await r.text()}`);
 }
 
 // ---------- cenários ----------
@@ -234,6 +241,7 @@ function aplicarComando(c: Comando) {
       console.log(`[${c.bombona}] cenário DEVOLUÇÃO: voltando para ${ap.remoto.alvo?.nome ?? 'o local esperado'}`);
       break;
     case 'SEM_SINAL':
+      const silencioMs = silencioDoCenarioMs(semSinalSegundos, velocidadeAtual);
       ap.caladoAte = Date.now() + silencioMs;
       console.log(`[${c.bombona}] cenário SEM SINAL: rastreador calado por ${Math.round(silencioMs / 1000)} s`);
       break;
@@ -316,29 +324,61 @@ function sincronizar(remotos: DispositivoRemoto[]) {
 }
 
 /** Anda pela rota da viagem. Sem viagem, termina o caminho: a chegada é confirmada na borda da cerca, antes do alvo. */
-function mover(ap: Aparelho, viagem: Viagem | null) {
+function mover(ap: Aparelho, viagem: Viagem | null, velocidade: number) {
   const rota = ap.rota;
   if (!rota) return false;
   const emViagem = viagem?.chave === rota.chave;
   if (!emViagem && viagem) return false;
   const andando = rota.pontos.length > 0;
-  if (seguir(ap, rota.pontos, rota.passo)) {
+  if (seguir(ap, rota.pontos, rota.passo * velocidade)) {
     if (emViagem && ap.devolvendo) ap.devolvendo = false;
     if (!viagem) ap.rota = undefined;
   }
   return andando;
 }
 
+/** Frota nova, com a rodada de agora nos cabeçalhos (a frota velha, se ainda tiver envios no ar, fica com a dela). */
+function novaFrota() {
+  const rodada = rodadaAtual;
+  return criarFrota({
+    api: API,
+    token: TOKEN_SIMULADOR,
+    roteador: ROTEADOR,
+    patio,
+    tempo: { duracaoS: DURACAO_ROTEIRO_S, pausaMs: PAUSA_PARADA_MS, tickMs: TICK_MS },
+    passoBaseM: PASSO_FURGAO_M,
+    esperaEntreTentativasMs: ESPERA_ENTRE_TENTATIVAS_MS,
+    estaNoCliente,
+    cabecalhos: (): Record<string, string> => (rodada === undefined ? {} : { 'X-Rodada': String(rodada) }),
+  });
+}
+
 async function tick() {
   const estado = await buscarEstado();
   const { operacao, roteiros, comandos } = estado;
+  const { pausado, velocidade, rodada } = operacao;
+  const decorridoMs = Date.now() - ultimoTickEm;
+  ultimoTickEm = Date.now();
+  velocidadeAtual = velocidade;
+  // Reset: o servidor semeou tudo de novo (tokens e ids novos). Recomeça como se tivesse acabado de subir, antes de
+  // sincronizar; envios velhos ainda no ar só mexem em objetos descartados.
+  if (rodadaMudou(rodadaAtual, rodada)) {
+    console.log(`Simulação reiniciada (rodada ${rodada}): recomeçando`);
+    aparelhos.clear();
+    dispositivos = [];
+    dataVista = undefined;
+  }
+  if (rodadaAtual !== rodada) {
+    rodadaAtual = rodada;
+    frota = novaFrota();
+  }
   dispositivos = estado.dispositivos;
   sincronizar(dispositivos);
   comandos.forEach(aplicarComando);
-  vendasDoDia(operacao.data, operacao.pausado);
+  vendasDoDia(operacao.data, pausado);
 
   // Pausado: ninguém se move (furgão, venda, devolução); os parados continuam mandando a última posição.
-  const envios = frota.ciclo(roteiros, operacao.pausado);
+  const envios = frota.ciclo(roteiros, pausado, velocidade);
   for (const ap of aparelhos.values()) {
     // Rastreador arrancado: nunca mais manda leitura.
     if (ap.arrancada) continue;
@@ -348,6 +388,8 @@ async function tick() {
 
     // Rastreador calado: a bombona continua andando (uma venda com o sinal cortado leva ela embora de verdade); só
     // a leitura não sai.
+    // Pausado, o servidor congela o prazo de "sem sinal": o silêncio acompanha.
+    ap.caladoAte = estenderSilencio(ap.caladoAte, pausado, decorridoMs);
     const calado = ap.caladoAte !== undefined && ap.caladoAte > Date.now();
     if (ap.caladoAte && !calado) {
       ap.caladoAte = undefined;
@@ -362,16 +404,16 @@ async function tick() {
         ap.posicao = furgao.posicao;
         emMovimento = furgao.emMovimento;
       }
-    } else if (!operacao.pausado) {
-      emMovimento = mover(ap, viagem);
+    } else if (!pausado) {
+      emMovimento = mover(ap, viagem, velocidade);
     }
-    ap.bateria = Math.max(0, ap.bateria - (emMovimento ? CONSUMO_MOVIMENTO : CONSUMO_PARADA));
+    ap.bateria = Math.max(0, ap.bateria - consumoDeBateria(emMovimento, pausado, velocidade, TICK_MS));
     // A leitura repetida logo ao parar marca o fim do percurso, mesmo que a bombona saia de novo em menos de 1 s.
     const acabouDeParar = !emMovimento && ap.ticksParado === 0;
     ap.ticksParado = emMovimento ? 0 : ap.ticksParado + 1;
     if (calado) continue;
     if (emMovimento || acabouDeParar || ap.ticksParado % TICKS_ENTRE_SINAIS_PARADA === 0) {
-      envios.push(enviarLeitura(ap, emMovimento).catch((e) => console.warn(`[${ap.remoto.bombona}] falha no envio: ${e.message}`)));
+      envios.push(enviarLeitura(ap, emMovimento, rodada).catch((e) => console.warn(`[${ap.remoto.bombona}] falha no envio: ${e.message}`)));
     }
   }
   await Promise.all(envios);
@@ -381,17 +423,9 @@ async function aguardarApi() {
   for (let tentativa = 1; ; tentativa++) {
     try {
       const config = (await (await fetch(`${API}/configuracao`)).json()) as { semSinalSegundos: number; patio: Ponto };
-      silencioMs = (config.semSinalSegundos + 25) * 1000;
-      frota = criarFrota({
-        api: API,
-        token: TOKEN_SIMULADOR,
-        roteador: ROTEADOR,
-        patio: { lat: config.patio.lat, lng: config.patio.lng },
-        tempo: { duracaoS: DURACAO_ROTEIRO_S, pausaMs: PAUSA_PARADA_MS, tickMs: TICK_MS },
-        passoBaseM: PASSO_FURGAO_M,
-        esperaEntreTentativasMs: ESPERA_ENTRE_TENTATIVAS_MS,
-        estaNoCliente,
-      });
+      semSinalSegundos = config.semSinalSegundos;
+      patio = { lat: config.patio.lat, lng: config.patio.lng };
+      frota = novaFrota();
       return;
     } catch {
       if (tentativa === 1) console.log(`Aguardando a API em ${API}...`);

@@ -152,6 +152,8 @@ export type OpcoesFrota = {
   esperaEntreTentativasMs: number;
   /** Se a bombona (por código) está de fato no cliente: o simulador é quem sabe o que foi vendido. */
   estaNoCliente: (codigo: string) => boolean;
+  /** Cabeçalhos extras de todo POST (a rodada atual), lidos a cada envio. */
+  cabecalhos: () => Record<string, string>;
 };
 
 type Tentativa = { ocupado: boolean; proximaEm: number };
@@ -191,7 +193,7 @@ export function criarFrota(op: OpcoesFrota) {
   const postar = (caminho: string, corpo: unknown) =>
     fetch(`${op.api}${caminho}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${op.token}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${op.token}`, ...op.cabecalhos() },
       body: typeof corpo === 'string' ? corpo : JSON.stringify(corpo),
     });
 
@@ -299,7 +301,7 @@ export function criarFrota(op: OpcoesFrota) {
   }
 
   /** Um tick do furgão: pausa na parada e troca, volta ao pátio e conclusão, ou anda. */
-  function andar(f: Furgao) {
+  function andar(f: Furgao, velocidade: number) {
     const rota = f.rota!;
     const alvo = rota.paradas[0];
     if (alvo && rota.proximo > alvo.indice) {
@@ -307,7 +309,7 @@ export function criarFrota(op: OpcoesFrota) {
         f.naParada = alvo.parada.id;
         f.pausa = ticksDePausa;
       }
-      if (f.pausa > 0) return void f.pausa--;
+      if (f.pausa > 0) return void (f.pausa -= velocidade);
       return trocar(f, alvo);
     }
     if (!alvo && rota.proximo >= rota.pontos.length) {
@@ -318,7 +320,7 @@ export function criarFrota(op: OpcoesFrota) {
     }
     const limite = alvo ? alvo.indice : rota.pontos.length - 1;
     const antes = f.posicao;
-    const r = avancar(rota.pontos, f.posicao, rota.proximo, rota.passo, limite);
+    const r = avancar(rota.pontos, f.posicao, rota.proximo, rota.passo * velocidade, limite);
     f.posicao = r.posicao;
     rota.proximo = r.proximo;
     f.emMovimento = distanciaM(antes, f.posicao) > 0;
@@ -327,9 +329,9 @@ export function criarFrota(op: OpcoesFrota) {
   return {
     /**
      * Um ciclo da frota com o estado do servidor: cria o furgão de cada roteiro novo, esquece os que saíram da lista
-     * e, fora da pausa, anda. Devolve os envios de posição do ciclo.
+     * e, fora da pausa, anda (em 2x, o dobro por ciclo). Devolve os envios de posição do ciclo.
      */
-    ciclo(roteiros: RoteiroRemoto[], pausado: boolean): Promise<void>[] {
+    ciclo(roteiros: RoteiroRemoto[], pausado: boolean, velocidade: number): Promise<void>[] {
       const ativos = new Set(roteiros.map((r) => r.id));
       for (const id of furgoes.keys()) if (!ativos.has(id)) furgoes.delete(id);
 
@@ -357,7 +359,7 @@ export function criarFrota(op: OpcoesFrota) {
         }
         if (f.trajeto) void enviarTrajeto(f);
         if (pausado || f.envio.ocupado) continue;
-        andar(f);
+        andar(f, velocidade);
         if (f.emMovimento) {
           const furgao = f;
           envios.push(

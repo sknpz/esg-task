@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { avancar, gerarLitros, indicesDasParadas, montarEncontradas, passoDoRoteiro, simplificarTrajeto } from '../src/furgoes.ts';
-import type { Ponto } from '../src/percurso.ts';
+import { avancar, criarFrota, gerarLitros, indicesDasParadas, montarEncontradas, passoDoRoteiro, simplificarTrajeto } from '../src/furgoes.ts';
+import { distanciaM, type Ponto } from '../src/percurso.ts';
 
 /** Sorteio previsível (LCG) para os testes estatísticos. */
 function sorteio(semente = 42) {
@@ -108,4 +108,77 @@ test('montarEncontradas leva as procuradas que estão lá, com a capacidade de c
     { codigo: 'BO-0002', litros: 140 },
   ]);
   assert.deepEqual(montarEncontradas(parada, () => false, meio), []);
+});
+
+// ---------- frota (com fetch falso) ----------
+
+type Chamada = { url: string; headers: Record<string, string> };
+
+/** Frota de um roteiro com uma parada a ~1 km a leste do pátio; OSRM e POSTs são falsos. */
+async function frotaComFetchFalso(cabecalhos: () => Record<string, string>) {
+  const patio = { lat: -23.66, lng: -52.6 };
+  const parada = { lat: -23.66, lng: -52.59 };
+  const chamadas: Chamada[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    const u = String(url);
+    chamadas.push({ url: u, headers: (init?.headers ?? {}) as Record<string, string> });
+    if (u.includes('/route/v1/')) {
+      const coordinates = [patio, parada, patio].map((p) => [p.lng, p.lat]);
+      return new Response(JSON.stringify({ routes: [{ distance: 2000, geometry: { coordinates } }] }), { status: 200 });
+    }
+    return new Response('{}', { status: 200 });
+  }) as typeof fetch;
+  const frota = criarFrota({
+    api: 'http://api',
+    token: 't',
+    roteador: 'http://osrm',
+    patio,
+    tempo: { duracaoS: 100_000, pausaMs: 1000, tickMs: 250 },
+    passoBaseM: 25,
+    esperaEntreTentativasMs: 2000,
+    estaNoCliente: () => true,
+    cabecalhos,
+  });
+  const roteiro = {
+    id: 1,
+    numero: 1,
+    bombonas: [],
+    paradas: [
+      { id: 10, ordem: 1, status: 'PENDENTE' as const, clienteId: 1, nome: 'C', ...parada, litrosEsperados: null, procuradas: [] },
+    ],
+  };
+  frota.ciclo([roteiro], false, 1); // começa a planejar
+  await new Promise((ok) => setTimeout(ok, 20));
+  return { frota, roteiro, chamadas, restaurar: () => (globalThis.fetch = original) };
+}
+
+test('em 2x o furgão anda o dobro por ciclo', async () => {
+  const a = await frotaComFetchFalso(() => ({}));
+  const b = await frotaComFetchFalso(() => ({}));
+  try {
+    const inicio = a.frota.posicao(1)!.posicao;
+    await Promise.all(a.frota.ciclo([a.roteiro], false, 1));
+    await Promise.all(b.frota.ciclo([b.roteiro], false, 2));
+    const d1 = distanciaM(inicio, a.frota.posicao(1)!.posicao);
+    const d2 = distanciaM(inicio, b.frota.posicao(1)!.posicao);
+    assert.ok(d1 > 20, `d1: ${d1}`);
+    assert.ok(Math.abs(d2 - 2 * d1) < 0.5, `d1: ${d1}, d2: ${d2}`);
+  } finally {
+    a.restaurar();
+    b.restaurar();
+  }
+});
+
+test('todo POST da frota leva os cabeçalhos', async () => {
+  const f = await frotaComFetchFalso(() => ({ 'X-Rodada': '7' }));
+  try {
+    await Promise.all(f.frota.ciclo([f.roteiro], false, 1));
+    const posts = f.chamadas.filter((c) => c.url.includes('/roteiros/'));
+    assert.ok(posts.some((c) => c.url.endsWith('/posicao')), 'sem POST de posição');
+    assert.ok(posts.some((c) => c.url.endsWith('/trajeto')), 'sem POST de trajeto');
+    for (const c of posts) assert.equal(c.headers['X-Rodada'], '7', c.url);
+  } finally {
+    f.restaurar();
+  }
 });
