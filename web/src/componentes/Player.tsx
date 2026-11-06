@@ -22,7 +22,10 @@ export function Player() {
     if (!op) return;
     const chave = `${op.rodada}|${op.data}`;
     if (maximo.current.chave !== chave) maximo.current = { chave, valor: 0 };
-    maximo.current.valor = Math.max(maximo.current.valor, andamentoDoDia(op, rs, Date.now()));
+    // Pausado, o relógio da fase está parado e `faseDesde` fica defasado até o ▶: não dá para contar o tempo
+    // desde ele. Congela no que a barra já mostrava (ou no começo da fase, se a página abriu com a simulação parada).
+    const agora = op.pausado ? Date.parse(op.faseDesde) : Date.now();
+    maximo.current.valor = Math.max(maximo.current.valor, andamentoDoDia(op, rs, agora));
     setAndamento(maximo.current.valor);
   }).current;
 
