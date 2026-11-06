@@ -12,6 +12,7 @@ export const rotuloAlerta: Record<TipoAlerta, string> = {
   EXTRAVIO: 'Extravio',
   SEM_SINAL: 'Sem sinal',
   BATERIA_BAIXA: 'Bateria baixa',
+  COLETA_ABAIXO: 'Coleta abaixo do esperado',
 };
 
 export const rotuloSeveridade: Record<Severidade, string> = { INFO: 'Info', AVISO: 'Aviso', CRITICO: 'Crítico' };

@@ -56,7 +56,7 @@ export function PainelBombona({ codigo, viagem, aoFechar }: Props) {
     if (!detalhe) return [];
     const eventos: Evento[] = detalhe.movimentacoes.map((m) => ({
       quando: m.criadoEm,
-      titulo: `${rotuloMovimentacao[m.tipo] ?? m.tipo}${m.cliente ? ` · ${m.cliente}` : ''}`,
+      titulo: `${rotuloMovimentacao[m.tipo] ?? m.tipo}${m.cliente ? ` · ${m.cliente}` : ''}${m.litros != null ? ` · ${m.litros} L` : ''}`,
       texto: m.observacao,
       tom: 'mov',
     }));

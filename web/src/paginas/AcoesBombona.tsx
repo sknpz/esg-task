@@ -7,6 +7,7 @@ export function AcoesBombona({ bombona: b }: { bombona: Bombona }) {
   const { clientes, atualizarBombona } = useMonitoramento();
   const [clienteId, setClienteId] = useState('');
   const [observacao, setObservacao] = useState('');
+  const [litros, setLitros] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -16,6 +17,7 @@ export function AcoesBombona({ bombona: b }: { bombona: Bombona }) {
     try {
       atualizarBombona(await acao());
       setObservacao('');
+      setLitros('');
       setClienteId('');
     } catch (e) {
       setErro((e as Error).message);
@@ -70,12 +72,31 @@ export function AcoesBombona({ bombona: b }: { bombona: Bombona }) {
       className="acao"
       onSubmit={(e) => {
         e.preventDefault();
-        executar(() => api.coletar(b.codigo, observacao));
+        executar(() => api.coletar(b.codigo, recuperacao ? { observacao } : { litros: Number(litros), observacao }));
       }}
     >
       <label className="acao__rotulo" htmlFor="obs-coleta">
         {recuperacao ? 'Bombona encontrada? Registre a recuperação' : 'Coleta'}
       </label>
+      {!recuperacao && (
+        <>
+          <label className="acao__rotulo" htmlFor="litros-coleta">
+            Litros coletados
+          </label>
+          <input
+            id="litros-coleta"
+            className="campo"
+            type="number"
+            min={0}
+            max={b.capacidadeL}
+            step={1}
+            required
+            placeholder={`0 a ${b.capacidadeL}`}
+            value={litros}
+            onChange={(e) => setLitros(e.target.value)}
+          />
+        </>
+      )}
       <input
         id="obs-coleta"
         className="campo"

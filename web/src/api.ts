@@ -1,5 +1,5 @@
 export type Status = 'PATIO' | 'EM_ROTA' | 'EM_CLIENTE' | 'EXTRAVIADA';
-export type TipoAlerta = 'FORA_DA_AREA' | 'EXTRAVIO' | 'SEM_SINAL' | 'BATERIA_BAIXA';
+export type TipoAlerta = 'FORA_DA_AREA' | 'EXTRAVIO' | 'SEM_SINAL' | 'BATERIA_BAIXA' | 'COLETA_ABAIXO';
 export type Severidade = 'INFO' | 'AVISO' | 'CRITICO';
 export type Cenario = 'VENDA' | 'DEVOLUCAO' | 'SEM_SINAL' | 'BATERIA_FRACA';
 
@@ -38,7 +38,7 @@ export type Alerta = {
   cliente: string | null;
 };
 
-export type Movimentacao = { id: number; tipo: string; observacao: string | null; criadoEm: string; cliente: string | null };
+export type Movimentacao = { id: number; tipo: string; litros: number | null; observacao: string | null; criadoEm: string; cliente: string | null };
 
 export type DetalheBombona = Bombona & { movimentacoes: Movimentacao[]; alertas: Alerta[] };
 
@@ -97,7 +97,8 @@ export const api = {
   alertas: (status?: 'ABERTO' | 'RESOLVIDO') => requisitar<Alerta[]>(`/alertas${status ? `?status=${status}` : ''}`),
   entregar: (codigo: string, clienteId: number, observacao?: string) =>
     enviar<Bombona>(`/bombonas/${codigo}/entrega`, { clienteId, observacao }),
-  coletar: (codigo: string, observacao?: string) => enviar<Bombona>(`/bombonas/${codigo}/coleta`, { observacao }),
+  coletar: (codigo: string, entrada: { litros?: number; observacao?: string }) =>
+    enviar<Bombona>(`/bombonas/${codigo}/coleta`, entrada),
   resolverAlerta: (id: number, observacao: string) => enviar<Alerta>(`/alertas/${id}/resolver`, { observacao }),
   simular: (bombona: string, tipo: Cenario) => enviar<unknown>('/simulacao/comandos', { bombona, tipo }),
 };
