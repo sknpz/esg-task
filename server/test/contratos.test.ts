@@ -102,14 +102,14 @@ describe('contratos (RN19)', () => {
   });
 });
 
-it('banco na versão 2 é recriado na versão 3', () => {
-  assert.equal(VERSAO_ESQUEMA, 3);
+it('banco na versão 2 é recriado na versão 4', () => {
+  assert.equal(VERSAO_ESQUEMA, 4);
   const arquivo = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'esg-')), 'bombonas.db');
   const antigo = new DatabaseSync(arquivo);
   antigo.exec(`CREATE TABLE clientes (id INTEGER PRIMARY KEY, nome TEXT); PRAGMA user_version = 2;`);
   antigo.close();
   const db = abrirBanco(arquivo);
-  assert.equal((db.prepare('PRAGMA user_version').get() as any).user_version, 3);
+  assert.equal((db.prepare('PRAGMA user_version').get() as any).user_version, 4);
   for (const t of ['contratos', 'operacao', 'roteiros', 'paradas'])
     assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE name = ?").get(t), t);
   const cols = (tab: string) => (db.prepare(`PRAGMA table_info(${tab})`).all() as any[]).map((c) => c.name);

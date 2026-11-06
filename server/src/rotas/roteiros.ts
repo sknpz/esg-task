@@ -4,6 +4,7 @@ import { dataOperacao } from '../contratos.ts';
 import {
   concluirRoteiro,
   continuar,
+  definirVelocidade,
   estadoOperacao,
   pausar,
   registrarPosicao,
@@ -41,6 +42,12 @@ export function rotasDeRoteiros(ctx: Contexto) {
 
   r.post('/operacao/continuar', (_req, res) => {
     res.json(continuar(ctx));
+  });
+
+  r.post('/operacao/velocidade', (req, res) => {
+    const velocidade = req.body?.velocidade;
+    if (velocidade !== 1 && velocidade !== 2) return void res.status(400).json({ erro: 'velocidade deve ser 1 ou 2' });
+    res.json(definirVelocidade(ctx, velocidade));
   });
 
   r.get('/roteiros', (req, res) => {

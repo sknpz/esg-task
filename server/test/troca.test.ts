@@ -10,6 +10,7 @@ import type { Evento } from '../src/eventos.ts';
 import {
   avancarOperacao,
   concluirRoteiro,
+  continuar,
   estadoOperacao,
   iniciarRoteiros,
   planejarDia,
@@ -458,6 +459,7 @@ describe('fim do roteiro e reinício', () => {
     ]);
     retomarAposReinicio(ctx); // nada em andamento: não faz nada
     estadoOperacao(ctx);
+    continuar(ctx);
     avancarOperacao(ctx);
     assert.equal(estadoOperacao(ctx).fase, 'ROTAS');
     ctx.db.prepare("UPDATE bombonas SET status = 'EXTRAVIADA' WHERE codigo = 'BO-0008'").run();
@@ -623,11 +625,12 @@ describe('API dos furgões (simulador)', () => {
     const { ctx } = cenario([{ cliente: 1, qtd: 2 }]);
     const chamar = await api(ctx);
     estadoOperacao(ctx);
+    continuar(ctx);
     avancarOperacao(ctx); // furgões saem
     const [roteiro] = roteirosDoDia(ctx.db, ctx.config, SEGUNDA).roteiros;
 
     const estado = (await chamar('/simulacao/estado')).corpo;
-    assert.deepEqual(estado.operacao, { data: SEGUNDA, pausado: false });
+    assert.deepEqual(estado.operacao, { data: SEGUNDA, pausado: false, velocidade: 1, rodada: 1 });
     assert.equal(estado.roteiros.length, 1);
     const [r] = estado.roteiros;
     assert.equal(r.id, roteiro.id);

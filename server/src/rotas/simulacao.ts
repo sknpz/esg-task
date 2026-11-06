@@ -95,8 +95,15 @@ export function rotasDeSimulacao(ctx: Contexto) {
         .all(agoraIso()),
     );
 
-    const pausado = db.prepare('SELECT pausado FROM operacao WHERE id = 1').get() as { pausado: number } | undefined;
-    const operacao = { data: dataOperacao(ctx), pausado: pausado?.pausado === 1 };
+    const linhaOp = db.prepare('SELECT pausado, velocidade, rodada FROM operacao WHERE id = 1').get() as
+      | { pausado: number; velocidade: number; rodada: number }
+      | undefined;
+    const operacao = {
+      data: dataOperacao(ctx),
+      pausado: linhaOp?.pausado === 1,
+      velocidade: linhaOp?.velocidade ?? 1,
+      rodada: linhaOp?.rodada ?? 1,
+    };
 
     // Furgões na rua: o simulador faz as paradas e gera os litros em torno do esperado de cada cliente.
     const paradasDo = db.prepare(

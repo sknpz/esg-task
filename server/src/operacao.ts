@@ -2,7 +2,7 @@
 // RN20 (coletas do dia), RN23 (capacidade e frota), RN24 (estoque do pátio).
 
 import { abrirAlerta } from './alertas.ts';
-import { caiNaData, diaDaSemana, proximoDiaOperacao, type Frequencia } from './calendario.ts';
+import { caiNaData, diaDaSemana, diaDeOperacao, proximoDiaOperacao, type Frequencia } from './calendario.ts';
 import type { Config } from './config.ts';
 import { bombonaDto, bombonasProcuradas, linhaBombonaPorId, type LinhaBombona } from './consultas.ts';
 import type { Contexto } from './contexto.ts';
@@ -14,7 +14,19 @@ import { litrosEsperados } from './rendimento.ts';
 import { dividirEmRoteiros, type ParadaPlano } from './roteirizacao.ts';
 
 export type Fase = 'MANHA' | 'ROTAS' | 'FIM';
-export type EstadoOperacao = { data: string; diaSemana: number; fase: Fase; pausado: boolean };
+export type Velocidade = 1 | 2;
+export type EstadoOperacao = {
+  data: string;
+  diaSemana: number;
+  fase: Fase;
+  pausado: boolean;
+  velocidade: Velocidade;
+  rodada: number;
+  dia: number;
+  faseDesde: string;
+  /** Duração da pausa da fase (MANHA e FIM) na velocidade atual; null em ROTAS, que dura o que os furgões levarem. */
+  faseDuracaoMs: number | null;
+};
 
 export type MotivoParada = 'COLETA' | 'RETIRADA';
 export type StatusParada = 'PENDENTE' | 'FEITA' | 'NAO_ATENDIDA';
@@ -307,16 +319,21 @@ export function iniciarRoteiros(ctx: Contexto, data: string): void {
 
 // ---------------------------------------------------------------- relógio
 
-type LinhaOperacao = { data: string; fase: Fase; fase_desde: string; pausado: number };
+type LinhaOperacao = { data: string; fase: Fase; fase_desde: string; pausado: number; velocidade: Velocidade; rodada: number };
 
 const lerLinha = (db: Banco) =>
-  db.prepare('SELECT data, fase, fase_desde, pausado FROM operacao WHERE id = 1').get() as LinhaOperacao | undefined;
+  db.prepare('SELECT data, fase, fase_desde, pausado, velocidade, rodada FROM operacao WHERE id = 1').get() as LinhaOperacao | undefined;
 
-const paraEstado = (l: LinhaOperacao): EstadoOperacao => ({
+const paraEstado = (l: LinhaOperacao, config: Config): EstadoOperacao => ({
   data: l.data,
   diaSemana: diaDaSemana(l.data),
   fase: l.fase,
   pausado: l.pausado === 1,
+  velocidade: l.velocidade,
+  rodada: l.rodada,
+  dia: diaDeOperacao(config.dataInicialOperacao, l.data),
+  faseDesde: l.fase_desde,
+  faseDuracaoMs: l.fase === 'ROTAS' ? null : (config.fasePausaS * 1000) / l.velocidade,
 });
 
 /** Início da pausa em andamento, por banco. Em memória: depois de reiniciar, continuar recomeça a fase. */
@@ -328,13 +345,13 @@ const inicioDaPausa = new WeakMap<Banco, number>();
  */
 export function estadoOperacao(ctx: Contexto): EstadoOperacao {
   const atual = lerLinha(ctx.db);
-  if (atual) return paraEstado(atual);
+  if (atual) return paraEstado(atual, ctx.config);
   const data = ctx.config.dataInicialOperacao;
   transacao(ctx.db, () => {
-    ctx.db.prepare("INSERT INTO operacao (id, data, fase, fase_desde, pausado) VALUES (1, ?, 'MANHA', ?, 0)").run(data, agoraIso());
+    ctx.db.prepare("INSERT INTO operacao (id, data, fase, fase_desde, pausado) VALUES (1, ?, 'MANHA', ?, 1)").run(data, agoraIso());
     planejar(ctx, data);
   });
-  const estado = paraEstado(lerLinha(ctx.db)!);
+  const estado = paraEstado(lerLinha(ctx.db)!, ctx.config);
   ctx.eventos.emitir({ tipo: 'operacao', dados: estado });
   publicarRoteiros(ctx, data);
   return estado;
@@ -353,7 +370,7 @@ export function avancarOperacao(ctx: Contexto, agora = Date.now()): void {
   const linha = lerLinha(db);
   if (!linha) return void estadoOperacao(ctx); // criar a operação já é a entrada na manhã
   if (linha.pausado === 1) return;
-  const passouPausa = agora - Date.parse(linha.fase_desde) >= config.fasePausaS * 1000;
+  const passouPausa = agora - Date.parse(linha.fase_desde) >= (config.fasePausaS * 1000) / linha.velocidade;
 
   if (linha.fase === 'MANHA' && passouPausa) {
     const carregadas = transacao(db, () => {
@@ -400,6 +417,25 @@ export function continuar(ctx: Contexto, agora = Date.now()): EstadoOperacao {
   transacao(ctx.db, () =>
     ctx.db.prepare('UPDATE operacao SET pausado = 0, fase_desde = ? WHERE id = 1').run(new Date(desde).toISOString()),
   );
+  const estado = estadoOperacao(ctx);
+  ctx.eventos.emitir({ tipo: 'operacao', dados: estado });
+  return estado;
+}
+
+/**
+ * Troca 1x/2x. Fora de ROTAS a fase em curso mantém a fração já decorrida: `fase_desde` é reescalado para a nova
+ * duração. Pausada, a conta usa o início da pausa no lugar de `agora`.
+ */
+export function definirVelocidade(ctx: Contexto, velocidade: Velocidade, agora = Date.now()): EstadoOperacao {
+  estadoOperacao(ctx);
+  const linha = lerLinha(ctx.db)!;
+  if (linha.velocidade !== velocidade) {
+    const ref = linha.pausado === 1 ? (inicioDaPausa.get(ctx.db) ?? agora) : agora;
+    const desde = linha.fase === 'ROTAS' ? Date.parse(linha.fase_desde) : ref - ((ref - Date.parse(linha.fase_desde)) * linha.velocidade) / velocidade;
+    transacao(ctx.db, () =>
+      ctx.db.prepare('UPDATE operacao SET velocidade = ?, fase_desde = ? WHERE id = 1').run(velocidade, new Date(desde).toISOString()),
+    );
+  }
   const estado = estadoOperacao(ctx);
   ctx.eventos.emitir({ tipo: 'operacao', dados: estado });
   return estado;

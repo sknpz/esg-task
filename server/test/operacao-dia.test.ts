@@ -280,7 +280,11 @@ describe('relógio da operação', () => {
     const { ctx } = cenario([{ cliente: 1, freq: 'DIARIA', qtd: 1 }]);
     const eventos: Evento[] = [];
     ctx.eventos.ouvir((e) => eventos.push(e));
-    assert.deepEqual(estadoOperacao(ctx), { data: SEGUNDA, diaSemana: 1, fase: 'MANHA', pausado: false });
+    assert.deepEqual(
+      [estadoOperacao(ctx).data, estadoOperacao(ctx).diaSemana, estadoOperacao(ctx).fase, estadoOperacao(ctx).pausado],
+      [SEGUNDA, 1, 'MANHA', true],
+    );
+    continuar(ctx);
     assert.equal(contarParadas(ctx, SEGUNDA), 1); // a manhã já planeja o dia
 
     avancarOperacao(ctx);
@@ -309,6 +313,7 @@ describe('relógio da operação', () => {
     avancarOperacao(ctx);
     assert.equal(fase(ctx), `MANHA ${SEGUNDA} 1`);
     assert.equal(contarParadas(ctx, SEGUNDA), 1);
+    continuar(ctx);
     avancarOperacao(ctx);
     assert.equal(fase(ctx), `ROTAS ${SEGUNDA} 1`);
   });
@@ -316,6 +321,7 @@ describe('relógio da operação', () => {
   it('manhã e fim do dia esperam fasePausaS', () => {
     const { ctx } = cenario([], { fasePausaS: 5 });
     estadoOperacao(ctx);
+    continuar(ctx);
     const t0 = Date.parse('2026-11-06T12:00:00.000Z');
     ctx.db.prepare('UPDATE operacao SET fase_desde = ?').run(new Date(t0).toISOString());
     avancarOperacao(ctx, t0 + 4_000);
@@ -333,9 +339,13 @@ describe('relógio da operação', () => {
   it('pausado não muda de fase nem de data', () => {
     const { ctx } = cenario([{ cliente: 1, freq: 'DIARIA', qtd: 1 }]);
     estadoOperacao(ctx);
+    continuar(ctx);
     assert.equal(pausar(ctx).pausado, true);
     for (let i = 0; i < 5; i++) avancarOperacao(ctx, Date.now() + 60_000);
-    assert.deepEqual(estadoOperacao(ctx), { data: SEGUNDA, diaSemana: 1, fase: 'MANHA', pausado: true });
+    assert.deepEqual(
+      [estadoOperacao(ctx).data, estadoOperacao(ctx).fase, estadoOperacao(ctx).pausado],
+      [SEGUNDA, 'MANHA', true],
+    );
     assert.equal(noPatio(ctx), 5);
     assert.equal(continuar(ctx).pausado, false);
     avancarOperacao(ctx);
@@ -345,6 +355,7 @@ describe('relógio da operação', () => {
   it('a pausa estende a fase pelo tempo pausado', () => {
     const { ctx } = cenario([], { fasePausaS: 5 });
     estadoOperacao(ctx);
+    continuar(ctx);
     const t0 = Date.parse('2026-11-06T12:00:00.000Z');
     ctx.db.prepare('UPDATE operacao SET fase_desde = ?').run(new Date(t0).toISOString());
     pausar(ctx, t0 + 3_000);
@@ -371,10 +382,14 @@ describe('API da operação', () => {
       const r = await fetch(`${api.url}${caminho}`, { method: metodo });
       return { status: r.status, corpo: await r.json() };
     };
-    assert.deepEqual((await json('/operacao')).corpo, { data: SEGUNDA, diaSemana: 1, fase: 'MANHA', pausado: false });
+    const inicial = (await json('/operacao')).corpo;
+    assert.deepEqual(
+      [inicial.data, inicial.diaSemana, inicial.fase, inicial.pausado, inicial.velocidade, inicial.rodada, inicial.dia],
+      [SEGUNDA, 1, 'MANHA', true, 1, 1, 1],
+    );
+    assert.equal((await json('/operacao/continuar', 'POST')).corpo.pausado, false);
     assert.equal((await json('/operacao/pausar', 'POST')).corpo.pausado, true);
     assert.equal((await json('/operacao')).corpo.pausado, true);
-    assert.equal((await json('/operacao/continuar', 'POST')).corpo.pausado, false);
 
     const hoje = (await json('/roteiros')).corpo;
     assert.equal(hoje.data, SEGUNDA);

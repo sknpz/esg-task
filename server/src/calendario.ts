@@ -34,6 +34,13 @@ function diasEntre(de: string, ate: string): number {
   return Math.round((paraMs(ate) - paraMs(de)) / DIA_MS);
 }
 
+/** Número do dia de operação (1 = o dia inicial), contando só os dias em que há operação (sem domingo). */
+export function diaDeOperacao(inicial: string, data: string): number {
+  let dia = 1;
+  for (let d = inicial; d < data; d = proximoDiaOperacao(d)) dia++;
+  return dia;
+}
+
 /** Data de coleta do mês: dia limitado ao último do mês; domingo passa para a segunda. */
 function dataMensal(ano: number, mes: number, diaMes: number): string {
   const ultimo = new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate();

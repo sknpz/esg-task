@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { caiNaData, proximasColetas, proximoDiaOperacao, validarRegra, type RegraContrato } from '../src/calendario.ts';
+import { caiNaData, diaDeOperacao, proximasColetas, proximoDiaOperacao, validarRegra, type RegraContrato } from '../src/calendario.ts';
 
 const r = (x: Partial<RegraContrato>): RegraContrato => ({ frequencia: 'DIARIA', diasSemana: [], diaMes: null, inicio: '2026-11-02', ...x });
 
@@ -49,5 +49,13 @@ describe('calendário de coletas', () => {
     assert.deepEqual(validarRegra({ frequencia: 'MENSAL', diasSemana: [2], diaMes: 10, inicio: '2026-11-09' }),
       { frequencia: 'MENSAL', diasSemana: [], diaMes: 10, inicio: '2026-11-09' });
     assert.throws(() => validarRegra({ frequencia: 'DIARIA', diasSemana: [], diaMes: null, inicio: '2026-02-30' }));
+  });
+});
+
+describe('dia de operação', () => {
+  it('diaDeOperacao conta dias de operação, pulando domingo', () => {
+    assert.equal(diaDeOperacao('2026-11-09', '2026-11-09'), 1);
+    assert.equal(diaDeOperacao('2026-11-09', '2026-11-14'), 6);
+    assert.equal(diaDeOperacao('2026-11-09', '2026-11-16'), 7);
   });
 });
