@@ -1,4 +1,4 @@
-import { Router, type RequestHandler, type Response } from 'express';
+import { Router, type Response } from 'express';
 import type { Contexto } from '../contexto.ts';
 import { dataOperacao } from '../contratos.ts';
 import {
@@ -12,6 +12,7 @@ import {
   roteirosDoDia,
 } from '../operacao.ts';
 import { ErroDeNegocio } from '../operacoes.ts';
+import { exigirTokenSimulador } from './simulacao.ts';
 
 /** Converte erros de negócio em resposta HTTP; o resto segue para o tratador global. */
 function responder(res: Response, acao: () => unknown, status = 200) {
@@ -28,10 +29,7 @@ export function rotasDeRoteiros(ctx: Contexto) {
   const r = Router();
 
   // Quem move o furgão é o simulador: as rotas de escrita dos roteiros exigem o token dele.
-  const soSimulador: RequestHandler = (req, res, next) => {
-    if (req.get('authorization') !== `Bearer ${ctx.config.tokenSimulador}`) return void res.status(401).json({ erro: 'Não autorizado' });
-    next();
-  };
+  const soSimulador = exigirTokenSimulador(ctx.config);
 
   r.get('/operacao', (_req, res) => {
     res.json(estadoOperacao(ctx));

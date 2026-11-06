@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 
-export type Evento = { tipo: 'bombona' | 'alerta' | 'indicadores' | 'operacao' | 'roteiro'; dados: unknown };
+export type Evento = { tipo: 'bombona' | 'alerta' | 'indicadores' | 'operacao' | 'roteiro' | 'furgao'; dados: unknown };
 type Ouvinte = (evento: Evento) => void;
 
 /** Distribui eventos para os painéis conectados via Server-Sent Events. */

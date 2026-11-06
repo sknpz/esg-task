@@ -17,7 +17,7 @@ import {
   retomarAposReinicio,
   roteirosDoDia,
 } from '../src/operacao.ts';
-import { ErroDeNegocio } from '../src/operacoes.ts';
+import { ErroDeNegocio, resolverAlerta } from '../src/operacoes.ts';
 import { litrosEsperados } from '../src/rendimento.ts';
 import { criarContexto, subirApi } from './apoio.ts';
 
@@ -155,6 +155,26 @@ describe('troca na parada (RN21)', () => {
     assert.equal(aviso.cliente_id, 1);
   });
 
+  it('na mesma troca, o esperado da 2ª bombona já inclui os litros da 1ª (RN18)', () => {
+    const { ctx } = cenario([{ cliente: 1, qtd: 2 }]);
+    const { id } = bombona(ctx, 'BO-0001');
+    const ins = ctx.db.prepare("INSERT INTO movimentacoes (bombona_id, tipo, cliente_id, litros, criado_em) VALUES (?, 'COLETA', 1, 20, ?)");
+    for (let i = 3; i >= 1; i--) ins.run(id, new Date(Date.now() - i * 60_000).toISOString());
+    const { roteiro, parada } = sair(ctx);
+
+    // 1ª: 50 L, esperado 20 → sem aviso. 2ª: 14 L; esperado (50 + 20 + 20) / 3 = 30 → 14 < 15 → aviso.
+    // (Se a 1ª não entrasse na média, o esperado seria 20 e 14 L não avisaria.)
+    registrarTroca(ctx, roteiro.id, parada(1).id, {
+      encontradas: [
+        { codigo: 'BO-0001', litros: 50 },
+        { codigo: 'BO-0002', litros: 14 },
+      ],
+    });
+    assert.deepEqual(alertasAbertos(ctx, 'BO-0001', 'COLETA_ABAIXO'), []);
+    const [aviso] = alertasAbertos(ctx, 'BO-0002', 'COLETA_ABAIXO');
+    assert.match(aviso.mensagem, /14 L.*~30 L/);
+  });
+
   it('cliente novo: só deixa vazias', () => {
     const { ctx } = cenario();
     const clienteId = Number(
@@ -271,24 +291,56 @@ describe('sumiço descoberto na parada (RN22)', () => {
     assert.equal(bombona(ctx, 'BO-0002').status, 'EXTRAVIADA');
   });
 
-  it('o mesmo sumiço não conta de novo na visita seguinte', () => {
+  it('sumiço já registrado não é procurado de novo na visita seguinte', () => {
     const { ctx } = cenario([{ cliente: 1, qtd: 2 }]);
     const { roteiro, parada } = sair(ctx);
     registrarTroca(ctx, roteiro.id, parada(1).id, { encontradas: [{ codigo: 'BO-0001', litros: 30 }] });
     concluirRoteiro(ctx, roteiro.id);
     const depoisDaPrimeira = risco(ctx, 1).incidentes;
+    const naoEncontradas = () =>
+      (
+        ctx.db
+          .prepare("SELECT COUNT(*) AS n FROM movimentacoes WHERE tipo = 'NAO_ENCONTRADA' AND bombona_id = ?")
+          .get(bombona(ctx, 'BO-0002').id) as { n: number }
+      ).n;
+    assert.equal(naoEncontradas(), 1);
+    // O operador encerra o EXTRAVIO (ex.: valor cobrado do cliente); a próxima parada não o reabre.
+    const [extravio] = ctx.db
+      .prepare("SELECT a.id FROM alertas a WHERE a.tipo = 'EXTRAVIO' AND a.status = 'ABERTO' AND a.bombona_id = ?")
+      .all(bombona(ctx, 'BO-0002').id) as Array<{ id: number }>;
+    resolverAlerta(ctx, extravio.id, 'Não recuperada; reposição cobrada do cliente');
 
     planejarDia(ctx, TERCA);
     iniciarRoteiros(ctx, TERCA);
     const [r2] = roteirosDoDia(ctx.db, ctx.config, TERCA).roteiros;
+    assert.equal(r2.paradas[0].demanda, 2); // BO-0018 e BO-0019, deixadas na segunda
     const feita = registrarTroca(ctx, r2.id, r2.paradas[0].id, {
       encontradas: [
         { codigo: 'BO-0018', litros: 30 },
         { codigo: 'BO-0019', litros: 30 },
       ],
     });
-    assert.deepEqual(feita.resultado?.naoEncontradas, [{ codigo: 'BO-0002', incidente: false }]);
+    assert.deepEqual(feita.resultado?.naoEncontradas, []);
+    assert.equal(naoEncontradas(), 1);
+    assert.deepEqual(alertasAbertos(ctx, 'BO-0002', 'EXTRAVIO'), []);
+    assert.equal(bombona(ctx, 'BO-0002').status, 'EXTRAVIADA');
     assert.equal(risco(ctx, 1).incidentes, depoisDaPrimeira);
+  });
+
+  it('sumiço já registrado sai da conta do cliente no planejamento (retirada sem bombona a buscar)', () => {
+    // Cliente 6 só tem a BO-0009. A retirada não a encontra; uma segunda retirada não tem o que buscar.
+    const { ctx, ids } = cenario([{ cliente: 6, qtd: 1 }]);
+    editarContrato(ctx, ids[0], { quantidade: 1, frequencia: 'DIARIA', inicio: '2026-11-02', situacao: 'ENCERRADO' });
+    const { roteiro, parada } = sair(ctx);
+    assert.equal(parada(6).motivo, 'RETIRADA');
+    const feita = registrarTroca(ctx, roteiro.id, parada(6).id, { encontradas: [] });
+    assert.deepEqual(feita.resultado?.naoEncontradas, [{ codigo: 'BO-0009', incidente: true }]);
+    concluirRoteiro(ctx, roteiro.id);
+
+    const { id } = criarContrato(ctx, { clienteId: 6, quantidade: 1, frequencia: 'SEMANAL', diasSemana: [6], inicio: '2026-11-02' });
+    editarContrato(ctx, id, { quantidade: 1, frequencia: 'SEMANAL', diasSemana: [6], inicio: '2026-11-02', situacao: 'ENCERRADO' });
+    planejarDia(ctx, TERCA);
+    assert.equal((ctx.db.prepare('SELECT COUNT(*) AS n FROM paradas WHERE data = ?').get(TERCA) as { n: number }).n, 0);
   });
 
   it('FORA_DA_AREA antigo, de antes da última entrega, não impede a contagem', () => {
@@ -492,7 +544,9 @@ describe('API dos furgões (simulador)', () => {
     assert.equal(p.status, 200);
     assert.deepEqual(p.corpo.posicao, { lat: -23.68, lng: -52.62 });
     assert.deepEqual(roteirosDoDia(ctx.db, ctx.config, SEGUNDA).roteiros[0].posicao, { lat: -23.68, lng: -52.62 });
-    assert.ok(eventos.some((e) => e.tipo === 'roteiro' && (e.dados as { posicao: unknown }).posicao !== null));
+    // A posição vai num evento leve, sem o roteiro inteiro (o trajeto pode ser grande).
+    const depoisDoTrajeto = eventos.slice(eventos.findIndex((e) => e.tipo === 'roteiro') + 1);
+    assert.deepEqual(depoisDoTrajeto, [{ tipo: 'furgao', dados: { roteiroId: roteiro.id, lat: -23.68, lng: -52.62 } }]);
     assert.equal((await chamar('/roteiros/9999/posicao', { lat: 1, lng: 1 })).status, 404);
   });
 
@@ -528,6 +582,11 @@ describe('API dos furgões (simulador)', () => {
     assert.deepEqual([d.roteiroId, d.clienteId], [roteiro.id, 1]);
     const parada = estado.dispositivos.find((x: { bombona: string }) => x.bombona === 'BO-0009');
     assert.deepEqual([parada.roteiroId, parada.clienteId], [null, 6]);
+
+    // Parada feita não precisa mais das capacidades.
+    registrarTroca(ctx, roteiro.id, roteiro.paradas[0].id, { encontradas: [{ codigo: 'BO-0001', litros: 30 }] });
+    const [feita] = (await chamar('/simulacao/estado')).corpo.roteiros[0].paradas;
+    assert.deepEqual([feita.status, feita.capacidades], ['FEITA', []]);
 
     concluirRoteiro(ctx, roteiro.id);
     assert.deepEqual((await chamar('/simulacao/estado')).corpo.roteiros, []);

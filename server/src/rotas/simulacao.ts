@@ -1,11 +1,20 @@
-import { Router } from 'express';
-import { destino, linhaBombonaPorCodigo, localEsperado, type LinhaBombona } from '../consultas.ts';
+import { Router, type RequestHandler } from 'express';
+import type { Config } from '../config.ts';
+import { bombonasProcuradas, destino, linhaBombonaPorCodigo, localEsperado, type LinhaBombona } from '../consultas.ts';
 import type { Contexto } from '../contexto.ts';
 import { dataOperacao } from '../contratos.ts';
 import { agoraIso, transacao } from '../db.ts';
 import { litrosEsperados } from '../rendimento.ts';
 
 export const CENARIOS = ['VENDA', 'DEVOLUCAO', 'SEM_SINAL', 'BATERIA_FRACA'] as const;
+
+/** Só o simulador (que finge ser o hardware e os furgões) passa: `Authorization: Bearer <tokenSimulador>`, senão 401. */
+export function exigirTokenSimulador(config: Config): RequestHandler {
+  return (req, res, next) => {
+    if (req.get('authorization') !== `Bearer ${config.tokenSimulador}`) return void res.status(401).json({ erro: 'Não autorizado' });
+    next();
+  };
+}
 
 /**
  * Canal de controle da DEMONSTRAÇÃO. Não faz parte do produto: o painel pede um cenário
@@ -26,9 +35,7 @@ export function rotasDeSimulacao(ctx: Contexto) {
     res.status(201).json({ id: Number(lastInsertRowid), bombona: b.codigo, tipo });
   });
 
-  r.get('/simulacao/estado', (req, res) => {
-    if (req.get('authorization') !== `Bearer ${config.tokenSimulador}`) return void res.status(401).json({ erro: 'Não autorizado' });
-
+  r.get('/simulacao/estado', exigirTokenSimulador(config), (_req, res) => {
     const bombonas = db
       .prepare(
         `SELECT b.*, d.token, d.bateria, d.lat, d.lng, d.ultimo_sinal,
@@ -55,10 +62,8 @@ export function rotasDeSimulacao(ctx: Contexto) {
       `SELECT p.id, p.ordem, p.status, p.cliente_id AS clienteId, c.nome, c.lat, c.lng
        FROM paradas p JOIN clientes c ON c.id = p.cliente_id WHERE p.roteiro_id = ? ORDER BY p.ordem`,
     );
-    // As bombonas que a troca vai procurar no cliente (as mesmas da RN21/RN22).
-    const capacidadesDo = db.prepare(
-      "SELECT capacidade_l FROM bombonas WHERE cliente_id = ? AND status IN ('EM_CLIENTE', 'EXTRAVIADA') AND roteiro_id IS NULL ORDER BY codigo",
-    );
+    // As bombonas que a troca vai procurar no cliente (RN21/RN22); só interessam nas paradas por fazer.
+    const procuradas = bombonasProcuradas(db);
     const noFurgao = db.prepare('SELECT codigo FROM bombonas WHERE roteiro_id = ? ORDER BY codigo');
     const emAndamento = db
       .prepare("SELECT id, numero FROM roteiros WHERE status = 'EM_ANDAMENTO' ORDER BY data, numero")
@@ -70,7 +75,7 @@ export function rotasDeSimulacao(ctx: Contexto) {
         (p) => ({
           ...p,
           litrosEsperados: litrosEsperados(db, p.clienteId, config.coletaHistoricoN),
-          capacidades: (capacidadesDo.all(p.clienteId) as Array<{ capacidade_l: number }>).map((b) => b.capacidade_l),
+          capacidades: p.status === 'PENDENTE' ? procuradas(p.clienteId).map((b) => b.capacidade_l) : [],
         }),
       ),
       bombonas: (noFurgao.all(r.id) as Array<{ codigo: string }>).map((b) => b.codigo),

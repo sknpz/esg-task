@@ -4,7 +4,7 @@
 import { abrirAlerta } from './alertas.ts';
 import { caiNaData, diaDaSemana, proximoDiaOperacao, type Frequencia } from './calendario.ts';
 import type { Config } from './config.ts';
-import { bombonaDto, linhaBombonaPorId, type LinhaBombona } from './consultas.ts';
+import { bombonaDto, bombonasProcuradas, linhaBombonaPorId, type LinhaBombona } from './consultas.ts';
 import type { Contexto } from './contexto.ts';
 import { regraDoContrato } from './contratos.ts';
 import { agoraIso, transacao, type Banco } from './db.ts';
@@ -177,18 +177,12 @@ function planejar(ctx: Contexto, data: string) {
        ORDER BY k.cliente_id, k.id`,
     )
     .all() as LinhaContrato[];
-  const noCliente = db.prepare(
-    "SELECT COUNT(*) AS n FROM bombonas WHERE cliente_id = ? AND status = 'EM_CLIENTE' AND roteiro_id IS NULL",
-  );
-
-  // Bombonas que a troca procuraria no cliente (as "antigas" da Task 5).
-  const doCliente = db.prepare(
-    "SELECT COUNT(*) AS n FROM bombonas WHERE cliente_id = ? AND status IN ('EM_CLIENTE', 'EXTRAVIADA') AND roteiro_id IS NULL",
-  );
+  // Bombonas que a troca vai procurar no cliente; a demanda conta as que estão lá (as que voltam no furgão).
+  const procuradas = bombonasProcuradas(db);
 
   const porCliente = new Map<number, Candidata>();
   const candidata = (k: LinhaContrato, motivo: MotivoParada, vazias: number): Candidata => {
-    const { n } = noCliente.get(k.clienteId) as { n: number };
+    const n = procuradas(k.clienteId).filter((b) => b.status === 'EM_CLIENTE').length;
     return { clienteId: k.clienteId, lat: k.lat, lng: k.lng, demanda: Math.max(vazias, n), contratoId: k.id, motivo, vazias };
   };
   for (const k of contratos)
@@ -198,7 +192,7 @@ function planejar(ctx: Contexto, data: string) {
   const comContratoAtivo = new Set(contratos.filter((k) => k.situacao === 'ATIVO').map((k) => k.clienteId));
   for (const k of contratos) {
     if (k.situacao !== 'ENCERRADO' || comContratoAtivo.has(k.clienteId) || porCliente.has(k.clienteId)) continue;
-    if ((doCliente.get(k.clienteId) as { n: number }).n === 0) continue;
+    if (procuradas(k.clienteId).length === 0) continue;
     porCliente.set(k.clienteId, candidata(k, 'RETIRADA', 0));
   }
   db.prepare("UPDATE contratos SET retirada_pendente = 0 WHERE situacao = 'ENCERRADO' AND retirada_pendente = 1").run();
@@ -405,36 +399,25 @@ function exigirEmAndamento(db: Banco, roteiroId: number): LinhaStatusRoteiro {
 
 const paradaPorId = (db: Banco, id: number) => db.prepare(`${SELECT_PARADA} WHERE p.id = ?`).get(id) as LinhaParada | undefined;
 
-/** Bombonas que a troca procura no cliente: as dele, paradas lá ou já dadas como extraviadas. */
+/** As "antigas" da troca: as bombonas que ela procura no cliente (`bombonasProcuradas`), com a linha completa. */
 const antigasDoCliente = (db: Banco, clienteId: number) =>
-  (
-    db
-      .prepare(
-        "SELECT id FROM bombonas WHERE cliente_id = ? AND status IN ('EM_CLIENTE', 'EXTRAVIADA') AND roteiro_id IS NULL ORDER BY codigo",
-      )
-      .all(clienteId) as Array<{ id: number }>
-  ).map(({ id }) => linhaBombonaPorId(db, id)!);
+  bombonasProcuradas(db)(clienteId).map(({ id }) => linhaBombonaPorId(db, id)!);
 
 /**
- * RN22: a não encontrada conta incidente só se o sumiço ainda não foi visto desde a última vez que ela foi deixada
- * nesse cliente (sem entrega registrada, desde sempre): nem pelo rastreador (FORA_DA_AREA) nem por uma parada
- * anterior (NAO_ENCONTRADA), para o mesmo sumiço não contar duas vezes.
+ * RN22: a não encontrada conta incidente só se o rastreador não tinha visto o sumiço, isto é, se não há FORA_DA_AREA
+ * dela desde a última vez que foi deixada nesse cliente (sem entrega registrada, desde sempre). Sumiço já registrado
+ * por uma parada anterior nem chega aqui: a bombona deixa de ser procurada (`bombonasProcuradas`).
  */
 function contaIncidente(db: Banco, bombonaId: number, clienteId: number): boolean {
-  const { entrega } = db
-    .prepare(
-      `SELECT COALESCE(MAX(criado_em), '') AS entrega FROM movimentacoes
-       WHERE bombona_id = ? AND cliente_id = ? AND tipo = 'ENTREGA_CONCLUIDA'`,
-    )
-    .get(bombonaId, clienteId) as { entrega: string };
   const visto = db
     .prepare(
-      `SELECT 1 FROM alertas WHERE bombona_id = ? AND tipo = 'FORA_DA_AREA' AND aberto_em >= ?
-       UNION ALL
-       SELECT 1 FROM movimentacoes WHERE bombona_id = ? AND tipo = 'NAO_ENCONTRADA' AND criado_em >= ?
+      `SELECT 1 FROM alertas
+       WHERE bombona_id = ? AND tipo = 'FORA_DA_AREA'
+         AND aberto_em >= COALESCE((SELECT MAX(criado_em) FROM movimentacoes
+                                    WHERE bombona_id = ? AND cliente_id = ? AND tipo = 'ENTREGA_CONCLUIDA'), '')
        LIMIT 1`,
     )
-    .get(bombonaId, entrega, bombonaId, entrega);
+    .get(bombonaId, bombonaId, clienteId);
   return !visto;
 }
 
@@ -598,7 +581,9 @@ export function registrarPosicao(ctx: Contexto, roteiroId: number, entrada: { la
   if (!numeroFinito(lat) || !numeroFinito(lng)) throw new ErroDeNegocio(400, 'lat e lng devem ser números');
   exigirEmAndamento(ctx.db, roteiroId);
   ctx.db.prepare('UPDATE roteiros SET lat = ?, lng = ? WHERE id = ?').run(lat, lng, roteiroId);
-  return publicarRoteiro(ctx, roteiroId);
+  // Evento leve: a posição chega a cada passo do furgão; o roteiro inteiro (com o trajeto) só nas mudanças.
+  ctx.eventos.emitir({ tipo: 'furgao', dados: { roteiroId, lat, lng } });
+  return roteiroDto(ctx.db, ctx.config, roteiroId)!;
 }
 
 /**
