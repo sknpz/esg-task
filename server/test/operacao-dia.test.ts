@@ -222,6 +222,25 @@ describe('saída dos furgões (RN24)', () => {
     assert.equal(noPatio(ctx), 3);
   });
 
+  it('carrega vazias da capacidade que o cliente já usa, quando há no pátio', () => {
+    // Cliente 5 tem bombonas de 200 L; o 1, de 50 L. Duas das 5 vazias do pátio passam a ser de 200 L.
+    const { ctx } = cenario([
+      { cliente: 1, freq: 'DIARIA', qtd: 2 },
+      { cliente: 5, freq: 'DIARIA', qtd: 2 },
+    ]);
+    ctx.db.exec("UPDATE bombonas SET capacidade_l = 200 WHERE codigo IN ('BO-0019', 'BO-0021')");
+    planejarDia(ctx, SEGUNDA);
+    iniciarRoteiros(ctx, SEGUNDA);
+    const doCliente = (clienteId: number) =>
+      (
+        ctx.db
+          .prepare('SELECT codigo, capacidade_l AS capacidade FROM bombonas WHERE roteiro_id IS NOT NULL AND cliente_id = ? ORDER BY codigo')
+          .all(clienteId) as Array<{ codigo: string; capacidade: number }>
+      ).map((b) => `${b.codigo} ${b.capacidade}`);
+    assert.deepEqual(doCliente(5), ['BO-0019 200', 'BO-0021 200']);
+    assert.deepEqual(doCliente(1), ['BO-0018 50', 'BO-0020 50']);
+  });
+
   it('sem vazias suficientes a parada vira NAO_ATENDIDA', () => {
     // Pátio do seed: 5 vazias. Duas paradas de 4: a primeira da rota leva 4, a segunda fica sem.
     const { ctx } = cenario([

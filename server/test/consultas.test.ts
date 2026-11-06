@@ -23,9 +23,9 @@ describe('API de consulta', () => {
   before(async () => (api = await subirApi(ctx)));
   after(() => api.fechar());
 
-  it('lista as 101 bombonas do seed com posição e local esperado', async () => {
+  it('lista as 107 bombonas do seed com posição e local esperado', async () => {
     const bombonas = await (await fetch(`${api.url}/bombonas`)).json();
-    assert.equal(bombonas.length, 101);
+    assert.equal(bombonas.length, 107);
     const emCliente = bombonas.filter((b: any) => b.status === 'EM_CLIENTE');
     assert.equal(emCliente.length, 64);
     for (const b of emCliente) {
@@ -39,7 +39,7 @@ describe('API de consulta', () => {
 
   it('filtra por status', async () => {
     const patio = await (await fetch(`${api.url}/bombonas?status=PATIO`)).json();
-    assert.equal(patio.length, 35);
+    assert.equal(patio.length, 41);
   });
 
   it('detalha uma bombona com histórico e devolve 404 para código inexistente', async () => {
@@ -142,8 +142,8 @@ describe('API de consulta', () => {
 
   it('resume os indicadores', async () => {
     const ind = await (await fetch(`${api.url}/indicadores`)).json();
-    assert.equal(ind.total, 101);
-    assert.deepEqual(ind.porStatus, { PATIO: 35, EM_ROTA: 2, EM_CLIENTE: 64, EXTRAVIADA: 0 });
+    assert.equal(ind.total, 107);
+    assert.deepEqual(ind.porStatus, { PATIO: 41, EM_ROTA: 2, EM_CLIENTE: 64, EXTRAVIADA: 0 });
     assert.equal(ind.alertasAbertos, 0);
   });
 });

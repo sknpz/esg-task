@@ -30,6 +30,11 @@ describe('seed: clientes, contratos e estoque do pátio', () => {
     assert.ok(n >= ctx.config.furgaoCapacidade * ctx.config.frotaMaxima, `${n} no pátio`);
   });
 
+  it('pátio tem vazias de 200 L para o cliente de 200 L', () => {
+    const { n } = um<{ n: number }>("SELECT COUNT(*) AS n FROM bombonas WHERE status = 'PATIO' AND capacidade_l = 200");
+    assert.ok(n >= 6, `${n} de 200 L no pátio`);
+  });
+
   it('mistura de frequências: há DIARIA, SEMANAL com mais de um dia, QUINZENAL, MENSAL e clientes com 2 ou 3 bombonas', () => {
     const freq = new Set(todos<{ frequencia: string }>('SELECT frequencia FROM contratos').map((c) => c.frequencia));
     for (const f of ['DIARIA', 'SEMANAL', 'QUINZENAL', 'MENSAL']) assert.ok(freq.has(f), f);

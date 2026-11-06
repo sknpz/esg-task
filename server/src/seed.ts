@@ -67,6 +67,8 @@ const EM_ROTA_PARA = [3, 7];
 // Bombonas novas (BO-0036 em diante) dos clientes 26 a 49; o 50 não tem nenhuma.
 const BOMBONAS_NOVAS = [2, 1, 2, 1, 3, 1, 2, 1, 2, 1, 1, 2, 1, 1, 2, 1, 3, 1, 2, 1, 1, 2, 1, 1];
 const NO_PATIO_EXTRA = 30;
+// Vazias de 200 L no pátio, para a troca do cliente de 200 L (o carregamento prefere a capacidade que ele usa).
+const NO_PATIO_200L = 6;
 const INICIO_CONTRATOS = '2026-11-02';
 // Contrato dos clientes 1 a 49, na ordem: D = diária; S + dias (1 = segunda … 6 = sábado); Q + dia; M + dia do mês.
 const CONTRATOS = [
@@ -135,11 +137,11 @@ export function popularSeVazio(db: Banco, config: Config): boolean {
       ...ALOCACOES_REGIAO.map((cliente) => ({ status: 'EM_CLIENTE', cliente })),
     ];
 
-    const inserirBombona = (item: { status: string; cliente: number | null }, i: number) => {
+    const inserirBombona = (item: { status: string; cliente: number | null; capacidade?: number }, i: number) => {
       const codigo = `BO-${String(i + 1).padStart(4, '0')}`;
       const dispositivo = `DEV-${String(i + 1).padStart(4, '0')}`;
       const cliente = item.cliente ? CLIENTES[item.cliente - 1] : null;
-      const capacidade = cliente?.tipo === 'Indústria de alimentos' ? 200 : 50;
+      const capacidade = item.capacidade ?? (cliente?.tipo === 'Indústria de alimentos' ? 200 : 50);
       // Bombona em rota acabou de sair do pátio.
       const base = item.status === 'EM_CLIENTE' && cliente ? cliente : config.patio;
       const pos = perto(base.lat, base.lng, item.status === 'EM_ROTA' ? 400 : 25);
@@ -211,6 +213,10 @@ export function popularSeVazio(db: Banco, config: Config): boolean {
         insAlerta.run(bombonaId, inc.cliente, 'EXTRAVIO', 'CRITICO', 'Bombona a mais de 2 km do local esperado', aberto, resolvido, inc.resolucao);
       }
     }
+
+    // As vazias de 200 L entram por último, depois de todos os sorteios acima, para eles não mudarem.
+    const jaInseridas = plano.length + novas.length;
+    for (let j = 0; j < NO_PATIO_200L; j++) inserirBombona({ status: 'PATIO', cliente: null, capacidade: 200 }, jaInseridas + j);
   });
   return true;
 }

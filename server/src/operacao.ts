@@ -226,6 +226,27 @@ export function planejarDia(ctx: Contexto, data: string): void {
 
 // ---------------------------------------------------------------- saída dos furgões (RN24)
 
+/** Capacidade de bombona de cliente que ainda não tem nenhuma. */
+const CAPACIDADE_PADRAO_L = 50;
+
+/**
+ * Capacidade que o cliente já usa: a mais comum entre as bombonas que a troca procura nele (empate: a que aparece
+ * primeiro, por código); sem bombona, a padrão. Prepara a consulta uma vez; devolve a função por cliente.
+ */
+function capacidadeUsada(db: Banco) {
+  const procuradas = bombonasProcuradas(db);
+  return (clienteId: number): number => {
+    const contagem = new Map<number, number>();
+    for (const b of procuradas(clienteId)) contagem.set(b.capacidade_l, (contagem.get(b.capacidade_l) ?? 0) + 1);
+    let melhor = CAPACIDADE_PADRAO_L;
+    let maximo = 0;
+    for (const [capacidade, n] of contagem) {
+      if (n > maximo) [melhor, maximo] = [capacidade, n];
+    }
+    return melhor;
+  };
+}
+
 /** Carrega as vazias do pátio nos furgões planejados da data. Sem transação própria. Devolve as bombonas carregadas. */
 function iniciar(ctx: Contexto, data: string): number[] {
   const { db } = ctx;
@@ -234,7 +255,12 @@ function iniciar(ctx: Contexto, data: string): number[] {
     id: number;
   }>;
   const paradasDe = db.prepare("SELECT id, cliente_id AS clienteId, vazias FROM paradas WHERE roteiro_id = ? AND status = 'PENDENTE' ORDER BY ordem");
-  const vaziasDoPatio = db.prepare("SELECT id FROM bombonas WHERE status = 'PATIO' AND roteiro_id IS NULL ORDER BY codigo LIMIT ?");
+  // Prefere vazias da capacidade que o cliente já usa: a de 50 L num cliente de 200 L faria a próxima coleta parecer
+  // abaixo do esperado (RN18). Sem vazia dessa capacidade, leva as outras.
+  const vaziasDoPatio = db.prepare(
+    "SELECT id FROM bombonas WHERE status = 'PATIO' AND roteiro_id IS NULL ORDER BY (capacidade_l = ?) DESC, codigo LIMIT ?",
+  );
+  const capacidadeDoCliente = capacidadeUsada(db);
   const carregar = db.prepare(
     "UPDATE bombonas SET status = 'EM_ROTA', cliente_id = ?, roteiro_id = ?, leituras_fora = 0, atualizado_em = ? WHERE id = ?",
   );
@@ -250,7 +276,7 @@ function iniciar(ctx: Contexto, data: string): number[] {
   for (const r of roteiros) {
     let ordem = 0;
     for (const p of paradasDe.all(r.id) as Array<{ id: number; clienteId: number; vazias: number }>) {
-      const vazias = p.vazias === 0 ? [] : (vaziasDoPatio.all(p.vazias) as Array<{ id: number }>);
+      const vazias = p.vazias === 0 ? [] : (vaziasDoPatio.all(capacidadeDoCliente(p.clienteId), p.vazias) as Array<{ id: number }>);
       if (vazias.length < p.vazias) {
         semVazias.run(JSON.stringify(naoAtendida(SEM_VAZIAS)), p.id);
         continue;

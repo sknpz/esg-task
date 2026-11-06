@@ -131,7 +131,7 @@ describe('canal de simulação (demo)', () => {
     assert.equal((await post('/simulacao/comandos', { bombona: 'BO-0010', tipo: 'VENDA' })).status, 201);
 
     const estado = await get('/simulacao/estado', auth);
-    assert.equal(estado.dispositivos.length, 101);
+    assert.equal(estado.dispositivos.length, 107);
     const d = estado.dispositivos.find((x: any) => x.bombona === 'BO-0010');
     assert.equal(d.token, token('BO-0010'));
     assert.ok(d.alvo.nome);

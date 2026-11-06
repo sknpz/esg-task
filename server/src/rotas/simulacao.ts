@@ -9,6 +9,13 @@ import { litrosEsperados } from '../rendimento.ts';
 
 export const CENARIOS = ['VENDA', 'DEVOLUCAO', 'SEM_SINAL', 'BATERIA_FRACA', 'VENDA_SILENCIOSA'] as const;
 
+/** Condição SQL (sobre a bombona `b`): foi "vendida" com o rastreador arrancado desde a última vez que foi entregue. */
+const VENDIDA_EM_SILENCIO = `EXISTS (
+  SELECT 1 FROM simulacao_comandos s
+  WHERE s.bombona_id = b.id AND s.tipo = 'VENDA_SILENCIOSA'
+    AND s.criado_em >= COALESCE((SELECT MAX(e.criado_em) FROM movimentacoes e
+                                 WHERE e.bombona_id = b.id AND e.tipo = 'ENTREGA_CONCLUIDA'), ''))`;
+
 /**
  * Bombona para a venda com rastreador arrancado quando o painel não escolhe: uma em cliente, fora de furgão e que
  * ainda não foi "vendida" assim desde que foi deixada lá. Prefere cliente com coleta no próximo dia de operação,
@@ -18,12 +25,7 @@ function escolherParaVendaSilenciosa(db: Banco, hoje: string): { id: number; cod
   const candidatas = db
     .prepare(
       `SELECT b.id, b.codigo, b.cliente_id AS clienteId FROM bombonas b
-       WHERE b.status = 'EM_CLIENTE' AND b.roteiro_id IS NULL
-         AND NOT EXISTS (
-           SELECT 1 FROM simulacao_comandos s
-           WHERE s.bombona_id = b.id AND s.tipo = 'VENDA_SILENCIOSA'
-             AND s.criado_em >= COALESCE((SELECT MAX(e.criado_em) FROM movimentacoes e
-                                          WHERE e.bombona_id = b.id AND e.tipo = 'ENTREGA_CONCLUIDA'), ''))
+       WHERE b.status = 'EM_CLIENTE' AND b.roteiro_id IS NULL AND NOT ${VENDIDA_EM_SILENCIO}
        ORDER BY b.codigo`,
     )
     .all() as Array<{ id: number; codigo: string; clienteId: number }>;
@@ -75,11 +77,14 @@ export function rotasDeSimulacao(ctx: Contexto) {
     const bombonas = db
       .prepare(
         `SELECT b.*, d.token, d.bateria, d.lat, d.lng, d.ultimo_sinal,
-                c.nome AS cliente_nome, c.cidade AS cliente_cidade, c.lat AS cliente_lat, c.lng AS cliente_lng, c.raio_m AS cliente_raio
+                c.nome AS cliente_nome, c.cidade AS cliente_cidade, c.lat AS cliente_lat, c.lng AS cliente_lng, c.raio_m AS cliente_raio,
+                -- Rastreador arrancado: vendida em silêncio e ainda solta no mundo. Recuperada ou de volta ao furgão
+                -- ou ao pátio, ganhou rastreador novo.
+                (b.status IN ('EM_CLIENTE', 'EXTRAVIADA') AND ${VENDIDA_EM_SILENCIO}) AS arrancada
          FROM bombonas b JOIN dispositivos d ON d.id = b.dispositivo_id LEFT JOIN clientes c ON c.id = b.cliente_id
          ORDER BY b.codigo`,
       )
-      .all() as Array<LinhaBombona & { token: string }>;
+      .all() as Array<LinhaBombona & { token: string; arrancada: number }>;
 
     const comandos = transacao(db, () =>
       db
@@ -131,6 +136,8 @@ export function rotasDeSimulacao(ctx: Contexto) {
         alvo: destino(b, config) ?? localEsperado(b, config),
         roteiroId: b.roteiro_id,
         clienteId: b.cliente_id,
+        // Para o simulador reiniciado não "devolver" o rastreador de uma bombona vendida em silêncio.
+        arrancada: b.arrancada === 1,
       })),
       comandos,
     });

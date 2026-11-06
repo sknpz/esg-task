@@ -149,8 +149,11 @@ emprestada, levada por outra empresa de coleta ou simplesmente descartada.
   tela Coletas do dia e **não é remarcado**.
 - **RN24 – Estoque do pátio.** Um roteiro só sai com as vazias que existem no pátio. Se faltar vazia para uma
   parada, ela fica não atendida ("sem bombonas vazias no pátio") e o furgão sai sem ela; roteiro sem nenhuma
-  parada atendível não sai. O seed garante estoque: a soma das quantidades dos contratos mais a capacidade vezes
-  a frota máxima.
+  parada atendível não sai. Ao carregar, o furgão prefere vazias da mesma capacidade que as bombonas que o cliente
+  já usa (a mais comum entre elas; cliente sem bombona, 50 L) e só leva de outra capacidade se faltar no pátio:
+  uma vazia de 50 L num cliente de 200 L faria a coleta seguinte parecer abaixo do esperado (RN18). O seed
+  garante estoque: a soma das quantidades dos contratos mais a capacidade vezes a frota máxima, além de 6 vazias
+  de 200 L.
 
 > **Vendas clandestinas na vida real e na demonstração.** Na vida real elas são **frequentes**: é justamente o
 > problema que o sistema existe para tratar. Na demonstração o simulador as sorteia **raramente** (parâmetro

@@ -27,6 +27,8 @@ type DispositivoRemoto = {
   /** Furgão (roteiro) em que a bombona está; null fora de furgão. */
   roteiroId: number | null;
   clienteId: number | null;
+  /** Vendida com o rastreador arrancado (servidor guarda o cenário): vale ao recriar o aparelho num reinício. */
+  arrancada: boolean;
 };
 type Comando = { id: number; bombona: string; tipo: 'VENDA' | 'DEVOLUCAO' | 'SEM_SINAL' | 'BATERIA_FRACA' | 'VENDA_SILENCIOSA' };
 type Estado = {
@@ -291,6 +293,8 @@ function sincronizar(remotos: DispositivoRemoto[]) {
         remoto,
         posicao: remoto.posicao ?? remoto.alvo ?? { lat: -23.66, lng: -52.6 },
         bateria: remoto.bateria ?? 100,
+        // Simulador reiniciado: a venda com rastreador arrancado continua valendo (senão a bombona "voltaria").
+        arrancada: remoto.arrancada,
         ticksParado: Math.floor(Math.random() * TICKS_ENTRE_SINAIS_PARADA),
       });
       continue;

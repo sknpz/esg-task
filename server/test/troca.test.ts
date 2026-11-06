@@ -17,7 +17,7 @@ import {
   retomarAposReinicio,
   roteirosDoDia,
 } from '../src/operacao.ts';
-import { ErroDeNegocio, resolverAlerta } from '../src/operacoes.ts';
+import { coletar, ErroDeNegocio, resolverAlerta } from '../src/operacoes.ts';
 import { processarLeitura } from '../src/regras.ts';
 import { litrosEsperados } from '../src/rendimento.ts';
 import { criarContexto, subirApi } from './apoio.ts';
@@ -579,6 +579,43 @@ describe('API dos furgões (simulador)', () => {
     const depoisDoTrajeto = eventos.slice(eventos.findIndex((e) => e.tipo === 'roteiro') + 1);
     assert.deepEqual(depoisDoTrajeto, [{ tipo: 'furgao', dados: { roteiroId: roteiro.id, lat: -23.68, lng: -52.62 } }]);
     assert.equal((await chamar('/roteiros/9999/posicao', { lat: 1, lng: 1 })).status, 404);
+  });
+
+  it('/simulacao/estado diz se o rastreador foi arrancado (sobrevive ao reinício do simulador)', async () => {
+    const { ctx } = cenario([{ cliente: 1, qtd: 2 }]);
+    const chamar = await api(ctx);
+    const arrancada = async (codigo: string) =>
+      ((await chamar('/simulacao/estado')).corpo.dispositivos as Array<{ bombona: string; arrancada: boolean }>).find((d) => d.bombona === codigo)!
+        .arrancada;
+    assert.equal(await arrancada('BO-0002'), false);
+    assert.equal((await chamar('/simulacao/comandos', { tipo: 'VENDA_SILENCIOSA', bombona: 'BO-0002' })).status, 201);
+    assert.equal(await arrancada('BO-0002'), true);
+    assert.equal(await arrancada('BO-0001'), false);
+
+    // A parada não a acha: extraviada, continua sem rastreador.
+    const { roteiro, parada } = sair(ctx);
+    registrarTroca(ctx, roteiro.id, parada(1).id, { encontradas: [{ codigo: 'BO-0001', litros: 30 }] });
+    concluirRoteiro(ctx, roteiro.id);
+    assert.equal(bombona(ctx, 'BO-0002').status, 'EXTRAVIADA');
+    assert.equal(await arrancada('BO-0002'), true);
+
+    // Recuperada (ganha rastreador novo) e levada ao pátio.
+    coletar(ctx, 'BO-0002');
+    assert.equal(await arrancada('BO-0002'), false);
+    const { dispositivoId } = ctx.db.prepare("SELECT dispositivo_id AS dispositivoId FROM bombonas WHERE codigo = 'BO-0002'").get() as {
+      dispositivoId: string;
+    };
+    processarLeitura(ctx, dispositivoId, { ...ctx.config.patio, precisao: 5, bateria: 100, registradoEm: new Date(Date.now() + 1000).toISOString() });
+    assert.equal(bombona(ctx, 'BO-0002').status, 'PATIO');
+
+    // Nova entrega dela no cliente: rastreador funcionando.
+    planejarDia(ctx, TERCA);
+    iniciarRoteiros(ctx, TERCA);
+    const [r2] = roteirosDoDia(ctx.db, ctx.config, TERCA).roteiros;
+    assert.deepEqual(doRoteiro(ctx, r2.id), ['BO-0001', 'BO-0002']);
+    registrarTroca(ctx, r2.id, r2.paradas[0].id, { encontradas: [{ codigo: 'BO-0018', litros: 30 }, { codigo: 'BO-0019', litros: 30 }] });
+    assert.deepEqual([bombona(ctx, 'BO-0002').status, bombona(ctx, 'BO-0002').clienteId], ['EM_CLIENTE', 1]);
+    assert.equal(await arrancada('BO-0002'), false);
   });
 
   it('/simulacao/estado traz operacao e roteiros em andamento com paradas', async () => {
