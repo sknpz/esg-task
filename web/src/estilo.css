@@ -63,7 +63,7 @@ p {
 
 .app {
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
+  grid-template-rows: auto auto auto auto 1fr;
   height: 100dvh;
 }
 
@@ -1497,22 +1497,6 @@ path.leaflet-interactive:focus {
 }
 
 /* ---------- operação (topo) e contratos ---------- */
-.operacao {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  font-size: 13px;
-}
-
-.operacao__data {
-  font-weight: 700;
-}
-
-.operacao + .conexao {
-  margin-left: 0;
-}
-
 .contratos {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
@@ -1610,10 +1594,6 @@ path.leaflet-interactive:focus {
     flex-wrap: wrap;
     height: auto;
     padding: 8px 12px;
-  }
-
-  .operacao {
-    margin-left: auto;
   }
 
   .navegacao {
@@ -1788,4 +1768,97 @@ path.leaflet-interactive:focus {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--texto-suave);
+}
+
+/* ---------- player da simulação (abaixo do topo) ---------- */
+.player {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 20px;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borda);
+  font-size: 13px;
+}
+
+.player__controles {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.player__botao {
+  min-width: 34px;
+  height: 30px;
+}
+
+.player__data {
+  margin-left: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.player__dia {
+  font-weight: 400;
+  color: var(--texto-suave);
+}
+
+.player__andamento {
+  flex: 1;
+  min-width: 0;
+}
+
+.player__trilho {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--cinza-claro);
+  overflow: hidden;
+}
+
+.player__feito {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--verde);
+  transition: width 0.25s linear;
+}
+
+.player__marcas {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--texto-suave);
+}
+
+.player--confirmando {
+  flex-wrap: wrap;
+  background: var(--ambar-claro);
+}
+
+.player__pergunta {
+  flex: 1;
+  min-width: 0;
+}
+
+.player__botoes {
+  display: flex;
+  gap: 8px;
+}
+
+.player__erro {
+  color: #991b1b;
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .player {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 8px 12px;
+  }
+
+  .player__andamento {
+    flex: 1 0 100%;
+  }
 }

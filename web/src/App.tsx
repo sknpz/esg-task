@@ -1,9 +1,7 @@
-import { useState } from 'react';
 import { Link, NavLink, Route, Routes } from 'react-router-dom';
 import { Avisos } from './componentes/Avisos.tsx';
 import { Indicadores } from './componentes/Indicadores.tsx';
-import { api } from './api.ts';
-import { formatarDataOperacao } from './formato.ts';
+import { Player } from './componentes/Player.tsx';
 import { useMonitoramento } from './monitoramento.tsx';
 import { Alertas } from './paginas/Alertas.tsx';
 import { Clientes } from './paginas/Clientes.tsx';
@@ -12,19 +10,7 @@ import { Contratos } from './paginas/Contratos.tsx';
 import { Mapa } from './paginas/Mapa.tsx';
 
 export function App() {
-  const { conectado, alertasAbertos, operacao } = useMonitoramento();
-  const [alternando, setAlternando] = useState(false);
-  const alternarPausa = async () => {
-    if (!operacao) return;
-    setAlternando(true);
-    try {
-      await (operacao.pausado ? api.continuar() : api.pausar()); // o estado novo chega pelo evento 'operacao'
-    } catch {
-      /* sem resposta: o botão volta e o operador tenta de novo */
-    } finally {
-      setAlternando(false);
-    }
-  };
+  const { conectado, alertasAbertos } = useMonitoramento();
   return (
     <div className="app">
       <header className="topo">
@@ -47,19 +33,12 @@ export function App() {
           <NavLink to="/clientes">Clientes</NavLink>
           <NavLink to="/contratos">Contratos</NavLink>
         </nav>
-        {operacao && (
-          <div className="operacao" title="Data simulada da operação">
-            <span className="operacao__data">{formatarDataOperacao(operacao.data)}</span>
-            <button type="button" className="botao botao--pequeno" onClick={() => void alternarPausa()} disabled={alternando}>
-              {operacao.pausado ? 'Continuar' : 'Pausar'}
-            </button>
-          </div>
-        )}
         <span className={`conexao ${conectado ? 'conexao--on' : ''}`} title="Atualização em tempo real">
           <span className="conexao__ponto" />
           {conectado ? 'Ao vivo' : 'Reconectando…'}
         </span>
       </header>
+      <Player />
       <div className="aviso-prototipo">
         Protótipo hipotético: clientes, dados e rastreadores são <strong>simulados</strong>.
       </div>

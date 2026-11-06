@@ -79,6 +79,10 @@ Isso sobe três processos:
 | Painel     | http://localhost:5173        |
 | Simulador  | envia leituras para a API    |
 
+> **Rode de um clone no disco do PC, não do pendrive.** No pendrive (FAT32, sem links simbólicos) o
+> `npm install` da raiz falha, porque os workspaces dependem deles. E o banco SQLite fica tão lento ali que os
+> furgões andam aos pulos.
+
 O banco (`server/data/bombonas.db`) é criado e populado na primeira execução. Para começar do zero, apague o
 arquivo.
 
@@ -93,7 +97,7 @@ npm run simular    # em outro terminal
 Outros comandos:
 
 ```bash
-npm test           # testes do back-end (regras de negócio pela API)
+npm test           # testes do back-end, do simulador e da barra de andamento do painel
 npm run typecheck  # checagem de tipos em todos os pacotes
 ```
 
@@ -105,7 +109,7 @@ As variáveis de ambiente (tempo de sem sinal, distância de extravio etc.) est�
 | Tela         | O que mostra                                                                                     |
 |--------------|---------------------------------------------------------------------------------------------------|
 | **Mapa**     | Bombonas por status, cercas, trilha do percurso atual da selecionada (some quando ela sai para outro), botão de centralizar, indicadores e avisos ao vivo (alertas e etapas: entregue, chegou ao pátio, recarregada). Em rota: caminho que falta pelas ruas e previsão de chegada. O painel lateral (no celular, uma gaveta que abre e recolhe) tem a situação, as etapas do ciclo, a operação (entrega, coleta, recuperação), os controles da simulação e a linha do tempo |
-| **Coletas do dia** | Data simulada, botão de pausar e continuar, um cartão por furgão (paradas, bombonas pela capacidade, km, situação), a lista de paradas com o resultado de cada troca, as coletas não atendidas e o mapa com os furgões andando |
+| **Coletas do dia** | Data simulada, um cartão por furgão (paradas, bombonas pela capacidade, km, situação), a lista de paradas com o resultado de cada troca, as coletas não atendidas e o mapa com os furgões andando |
 | **Contratos** | Lista com frequência, quantidade e próximas coletas; cria, edita e encerra contratos |
 | **Alertas**  | Abertos e histórico, com resolução manual e observação                                            |
 | **Clientes** | Ranking de risco pelo histórico de incidentes                                                     |
@@ -114,14 +118,19 @@ As variáveis de ambiente (tempo de sem sinal, distância de extravio etc.) est�
 
 ## Roteiro de demonstração
 
+> **O player.** A barra abaixo do cabeçalho controla a simulação em todas as abas: ▶/⏸ para rodar e pausar,
+> **1x/2x** para a velocidade, ⟲ para voltar ao começo (pede confirmação) e a trilha mostra o andamento do dia
+> (manhã, furgões na rua, fim do dia). A simulação **nasce parada**: aperte ▶ para começar, use **2x** quando
+> quiser acelerar e dê **⟲ entre uma apresentação e outra** para apagar tudo e recomeçar na segunda-feira, dia 1.
+
 > **Sobre as vendas clandestinas.** Na vida real elas são **frequentes**: é o problema que o sistema existe para
 > tratar. Na demonstração o simulador as sorteia **raramente** (`SIM_VENDAS_POR_DIA`) só para não poluir a tela;
 > por isso o roteiro abaixo as força com botões.
 
-1. **Assista a um dia.** Abra o painel na aba **Coletas do dia**. A data simulada começa numa segunda-feira
-   (09/11). Depois da manhã (as coletas são geradas dos contratos), 2 ou 3 furgões saem do pátio, cada um com a
-   sua região, e trocam as bombonas em cada parada: veja o resultado de cada uma na lista. Um dia leva uns 2 minutos.
-2. **Pause.** O botão de pausar congela o relógio e os furgões (os rastreadores continuam mandando sinal). Use
+1. **Assista a um dia.** Abra o painel na aba **Coletas do dia** e aperte ▶. A data simulada começa numa
+   segunda-feira (09/11). Depois da manhã (as coletas são geradas dos contratos), 2 ou 3 furgões saem do pátio, cada um com a
+   sua região, e trocam as bombonas em cada parada: veja o resultado de cada uma na lista. Um dia leva uns 2 minutos (1 minuto em 2x).
+2. **Pause.** O botão ⏸ congela o relógio e os furgões (os rastreadores continuam mandando sinal). Use
    para explicar o que está na tela e continue depois.
 3. **Crie o contrato do cliente sem contrato.** Na aba **Contratos** escolha o cliente que ainda não tem
    contrato. Defina a quantidade e a frequência e veja as próximas datas. O contrato vale **a partir do

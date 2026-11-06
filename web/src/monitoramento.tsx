@@ -158,6 +158,14 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
       setOperacao(op);
       recarregarRoteiros(op.data).catch(() => {});
     });
+    // O reset apaga coletas, alertas e roteiros sem emitir eventos deles: tudo recomeça do zero.
+    fonte.addEventListener('reset', () => {
+      pendentes.current = {};
+      setAvisos([]);
+      setRoteiros([]);
+      setAlertasAbertos([]);
+      recarregar().catch(() => {});
+    });
     fonte.addEventListener('roteiro', (e) => {
       const roteiro: Roteiro = JSON.parse((e as MessageEvent).data);
       setRoteiros((atual) =>

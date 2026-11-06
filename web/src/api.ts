@@ -77,7 +77,19 @@ export type Configuracao = {
 };
 
 export type Fase = 'MANHA' | 'ROTAS' | 'FIM';
-export type Operacao = { data: string; diaSemana: number; fase: Fase; pausado: boolean };
+export type Velocidade = 1 | 2;
+export type Operacao = {
+  data: string;
+  diaSemana: number;
+  fase: Fase;
+  pausado: boolean;
+  velocidade: Velocidade;
+  rodada: number;
+  dia: number;
+  faseDesde: string;
+  /** Já dividida pela velocidade; null enquanto os furgões estão na rua. */
+  faseDuracaoMs: number | null;
+};
 
 export type Frequencia = 'DIARIA' | 'SEMANAL' | 'QUINZENAL' | 'MENSAL';
 export type Contrato = {
@@ -168,6 +180,8 @@ export const api = {
   operacao: () => requisitar<Operacao>('/operacao'),
   pausar: () => enviar<Operacao>('/operacao/pausar', {}),
   continuar: () => enviar<Operacao>('/operacao/continuar', {}),
+  velocidade: (velocidade: Velocidade) => enviar<Operacao>('/operacao/velocidade', { velocidade }),
+  resetar: () => enviar<Operacao>('/operacao/reset', {}),
   contratos: () => requisitar<Contrato[]>('/contratos'),
   criarContrato: (e: EntradaContrato) => enviar<Contrato>('/contratos', e),
   editarContrato: (id: number, e: EntradaContrato) =>

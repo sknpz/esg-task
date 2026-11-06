@@ -32,7 +32,7 @@ function prioridade(b: Bombona) {
 const referenciaDe = (b: Bombona) => b.localEsperado ?? b.destino;
 
 export function Mapa() {
-  const { bombonas, clientes, config, carregado, agora, roteiros } = useMonitoramento();
+  const { bombonas, clientes, config, carregado, agora, roteiros, operacao } = useMonitoramento();
   const [params, setParams] = useSearchParams();
   const selecionada = params.get('b');
   const clienteFocado = Number(params.get('c')) || null;
@@ -66,6 +66,15 @@ export function Mapa() {
   }, [todas, filtro, busca]);
 
   const selecionar = (codigo: string | null) => setParams(codigo ? { b: codigo } : {}, { replace: true });
+
+  // Reset da simulação: a bombona escolhida pode nem existir mais, então a seleção volta a zero.
+  const rodada = operacao?.rodada;
+  const rodadaVista = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (rodada === undefined) return;
+    if (rodadaVista.current !== undefined && rodadaVista.current !== rodada) setParams({}, { replace: true });
+    rodadaVista.current = rodada;
+  }, [rodada, setParams]);
 
   return (
     <div className="mapa-pagina">
