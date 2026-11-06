@@ -1,5 +1,5 @@
 import { abrirAlerta, resolverAlertasDaBombona, temAlertaAberto } from './alertas.ts';
-import { bombonaDto, destino, linhaBombonaPorId, localEsperado } from './consultas.ts';
+import { bombonaDto, destino, linhaBombonaPorId, localEsperado, sumicoRegistradoNaParada } from './consultas.ts';
 import type { Contexto } from './contexto.ts';
 import { transacao } from './db.ts';
 import { dentroDaCerca, distanciaM } from './geo.ts';
@@ -111,8 +111,9 @@ export function processarLeitura(ctx: Contexto, dispositivoId: string, leitura: 
               severidade: 'AVISO',
               mensagem: `Saiu da cerca de ${esperado.nome} (${Math.round(distancia)} m do ponto)`,
               em,
-              // Passou da leitura de confirmação: é a mesma saída, reaberta após resolução manual (RN15).
-              reaberto: leiturasFora > LEITURAS_PARA_CONFIRMAR,
+              // Passou da leitura de confirmação: é a mesma saída, reaberta após resolução manual (RN15). Sumiço que
+              // uma parada já registrou também não conta de novo (RN22: um sumiço conta uma vez só).
+              reaberto: leiturasFora > LEITURAS_PARA_CONFIRMAR || sumicoRegistradoNaParada(db, b.id),
             }),
           );
           // RN08: longe demais vira extravio.

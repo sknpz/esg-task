@@ -159,6 +159,24 @@ export function trilha(db: Banco, bombonaId: number, limite = 200) {
 export type Procurada = { id: number; codigo: string; capacidade_l: number; status: 'EM_CLIENTE' | 'EXTRAVIADA' };
 
 /**
+ * Condição SQL (sobre a bombona `b`): uma parada já registrou o sumiço dela, isto é, há NAO_ENCONTRADA nesse cliente
+ * desde a última vez que ela foi deixada lá.
+ */
+const SUMICO_REGISTRADO_NA_PARADA = `EXISTS (
+  SELECT 1 FROM movimentacoes m
+  WHERE m.bombona_id = b.id AND m.cliente_id = b.cliente_id AND m.tipo = 'NAO_ENCONTRADA'
+    AND m.criado_em >= COALESCE((SELECT MAX(e.criado_em) FROM movimentacoes e
+                                 WHERE e.bombona_id = b.id AND e.cliente_id = b.cliente_id AND e.tipo = 'ENTREGA_CONCLUIDA'), ''))`;
+
+/** Extraviada cujo sumiço uma parada já registrou (ver `SUMICO_REGISTRADO_NA_PARADA`): já contou no risco do cliente. */
+export function sumicoRegistradoNaParada(db: Banco, bombonaId: number): boolean {
+  const linha = db
+    .prepare(`SELECT 1 FROM bombonas b WHERE b.id = ? AND b.status = 'EXTRAVIADA' AND ${SUMICO_REGISTRADO_NA_PARADA}`)
+    .get(bombonaId);
+  return linha !== undefined;
+}
+
+/**
  * RN21/RN22: as bombonas do cliente que a troca procura na parada. São as dele fora de furgão, paradas lá ou
  * extraviadas, menos a extraviada cujo sumiço uma parada já registrou (NAO_ENCONTRADA nesse cliente desde a
  * última vez que ela foi deixada lá): essa não é procurada de novo. A mesma definição vale para o planejamento
@@ -168,11 +186,7 @@ export function bombonasProcuradas(db: Banco) {
   const consulta = db.prepare(
     `SELECT b.id, b.codigo, b.capacidade_l, b.status FROM bombonas b
      WHERE b.cliente_id = ? AND b.roteiro_id IS NULL
-       AND (b.status = 'EM_CLIENTE' OR (b.status = 'EXTRAVIADA' AND NOT EXISTS (
-         SELECT 1 FROM movimentacoes m
-         WHERE m.bombona_id = b.id AND m.cliente_id = b.cliente_id AND m.tipo = 'NAO_ENCONTRADA'
-           AND m.criado_em >= COALESCE((SELECT MAX(e.criado_em) FROM movimentacoes e
-                                        WHERE e.bombona_id = b.id AND e.cliente_id = b.cliente_id AND e.tipo = 'ENTREGA_CONCLUIDA'), ''))))
+       AND (b.status = 'EM_CLIENTE' OR (b.status = 'EXTRAVIADA' AND NOT ${SUMICO_REGISTRADO_NA_PARADA}))
      ORDER BY b.codigo`,
   );
   return (clienteId: number) => consulta.all(clienteId) as Procurada[];

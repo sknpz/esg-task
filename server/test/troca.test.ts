@@ -18,6 +18,7 @@ import {
   roteirosDoDia,
 } from '../src/operacao.ts';
 import { ErroDeNegocio, resolverAlerta } from '../src/operacoes.ts';
+import { processarLeitura } from '../src/regras.ts';
 import { litrosEsperados } from '../src/rendimento.ts';
 import { criarContexto, subirApi } from './apoio.ts';
 
@@ -362,6 +363,36 @@ describe('sumiço descoberto na parada (RN22)', () => {
     foraDaArea(ctx, 'BO-0002', new Date(Date.now() - 100 * 86_400_000).toISOString());
     const feita = registrarTroca(ctx, roteiro.id, parada(1).id, { encontradas: [{ codigo: 'BO-0001', litros: 30 }] });
     assert.deepEqual(feita.resultado?.naoEncontradas, [{ codigo: 'BO-0002', incidente: false }]);
+  });
+
+  it('sumiço visto primeiro na parada e depois pelo rastreador: FORA_DA_AREA reaberto, risco sobe só 1', () => {
+    const { ctx } = cenario([{ cliente: 1, qtd: 2 }]);
+    const { roteiro, parada } = sair(ctx);
+    const antes = risco(ctx, 1);
+    // Rastreador mudo na hora da parada: o sumiço é registrado por ela.
+    const feita = registrarTroca(ctx, roteiro.id, parada(1).id, { encontradas: [{ codigo: 'BO-0001', litros: 30 }] });
+    assert.deepEqual(feita.resultado?.naoEncontradas, [{ codigo: 'BO-0002', incidente: true }]);
+    assert.equal(risco(ctx, 1).incidentes, antes.incidentes + 1);
+
+    // O rastreador volta a mandar leitura, longe do cliente: duas leituras fora confirmam a saída (RN07).
+    const { dispositivoId } = ctx.db.prepare("SELECT dispositivo_id AS dispositivoId FROM bombonas WHERE codigo = 'BO-0002'").get() as {
+      dispositivoId: string;
+    };
+    const cliente = ctx.db.prepare('SELECT lat, lng FROM clientes WHERE id = 1').get() as { lat: number; lng: number };
+    for (let i = 1; i <= 2; i++) {
+      processarLeitura(ctx, dispositivoId, {
+        lat: cliente.lat + 0.05, // ~5,5 km ao norte
+        lng: cliente.lng,
+        precisao: 10,
+        bateria: 80,
+        registradoEm: new Date(Date.now() + i * 1000).toISOString(),
+      });
+    }
+    const fora = ctx.db
+      .prepare("SELECT reaberto FROM alertas a JOIN bombonas b ON b.id = a.bombona_id WHERE b.codigo = 'BO-0002' AND a.tipo = 'FORA_DA_AREA' AND a.status = 'ABERTO'")
+      .all() as Array<{ reaberto: number }>;
+    assert.deepEqual(fora.map((a) => a.reaberto), [1]);
+    assert.equal(risco(ctx, 1).incidentes, antes.incidentes + 1);
   });
 
   it('2 de 3 sumidas: regra roda para cada uma', () => {

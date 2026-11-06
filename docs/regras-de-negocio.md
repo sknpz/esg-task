@@ -135,7 +135,9 @@ emprestada, levada por outra empresa de coleta ou simplesmente descartada.
   `NAO_ENCONTRADA`, marca a bombona `EXTRAVIADA` e abre o alerta `EXTRAVIO` se ainda não houver um. **Conta um
   incidente no risco do cliente (RN14) só se o rastreador não tinha visto o sumiço**, isto é, se não existe
   alerta `FORA_DA_AREA` da bombona aberto desde a última vez que ela foi deixada ali. Se o rastreador já tinha
-  detectado, a parada só confirma, sem somar de novo: um sumiço não conta duas vezes. Uma bombona já registrada
+  detectado, a parada só confirma, sem somar de novo: um sumiço não conta duas vezes. Vale também ao contrário:
+  se a parada registrou o sumiço primeiro e depois o rastreador volta a mandar leitura de longe, o `FORA_DA_AREA`
+  que ele abre é marcado como reaberto e não conta outro incidente. Uma bombona já registrada
   como não encontrada deixa de ser procurada nas visitas seguintes (não gera nova `NAO_ENCONTRADA` nem reabre o
   extravio), até que volte à cerca (RN09) ou seja recuperada à mão; se sumir de novo, é um sumiço novo. A regra
   roda por bombona: se 2 de 3 sumiram, roda duas vezes.

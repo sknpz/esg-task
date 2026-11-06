@@ -347,8 +347,10 @@ async function tick() {
     if (viagem) void planejarViagem(ap, viagem);
     else ap.planejando = undefined;
 
-    if (ap.caladoAte && ap.caladoAte > Date.now()) continue;
-    if (ap.caladoAte) {
+    // Rastreador calado: a bombona continua andando (uma venda com o sinal cortado leva ela embora de verdade); só
+    // a leitura não sai.
+    const calado = ap.caladoAte !== undefined && ap.caladoAte > Date.now();
+    if (ap.caladoAte && !calado) {
       ap.caladoAte = undefined;
       console.log(`[${ap.remoto.bombona}] sinal de volta`);
     }
@@ -368,6 +370,7 @@ async function tick() {
     // A leitura repetida logo ao parar marca o fim do percurso, mesmo que a bombona saia de novo em menos de 1 s.
     const acabouDeParar = !emMovimento && ap.ticksParado === 0;
     ap.ticksParado = emMovimento ? 0 : ap.ticksParado + 1;
+    if (calado) continue;
     if (emMovimento || acabouDeParar || ap.ticksParado % TICKS_ENTRE_SINAIS_PARADA === 0) {
       envios.push(enviarLeitura(ap, emMovimento).catch((e) => console.warn(`[${ap.remoto.bombona}] falha no envio: ${e.message}`)));
     }
