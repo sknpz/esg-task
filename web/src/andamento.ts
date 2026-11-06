@@ -18,7 +18,8 @@ function metros(a: [number, number], b: [number, number]) {
 /**
  * Quanto do trajeto o furgão já andou: distância até o ponto do trajeto mais próximo da posição, sobre o total.
  * A busca só olha do índice `aPartirDe` em diante: na volta, que repassa as mesmas ruas da ida, os pontos da ida
- * não podem "puxar" a posição para trás. Devolve também o índice achado, para a próxima chamada continuar dali.
+ * não podem "puxar" a posição para trás. A busca também tem uma janela de distância à frente (o furgão não salta
+ * trechos): sem ela, numa ida e volta pela mesma estrada um ponto da volta ganharia logo na saída. Devolve também o índice achado, para a próxima chamada continuar dali.
  */
 export function fracaoDoTrajeto(trajeto: [number, number][], posicao: Ponto, aPartirDe = 0): { fracao: number; indice: number } {
   if (trajeto.length < 2) return { fracao: 0, indice: 0 };
@@ -27,7 +28,11 @@ export function fracaoDoTrajeto(trajeto: [number, number][], posicao: Ponto, aPa
   const total = acumulada[acumulada.length - 1];
   let indice = Math.min(Math.max(0, aPartirDe), trajeto.length - 1);
   let menor = Infinity;
+  const inicio = indice;
+  const janela = Math.max(1000, 0.05 * total);
   for (let i = indice; i < trajeto.length; i++) {
+    // Sempre olha o ponto seguinte ao inicial, mesmo que os vértices sejam mais espaçados que a janela.
+    if (i > inicio + 1 && acumulada[i] > acumulada[inicio] + janela) break;
     const d = metros(trajeto[i], [posicao.lat, posicao.lng]);
     if (d < menor) {
       menor = d;

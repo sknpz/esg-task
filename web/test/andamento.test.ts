@@ -27,3 +27,12 @@ test('ida e volta: a partir do índice 2 acha o ponto da volta (0,75), não o da
   perto(volta.fracao, 0.75);
   assert.equal(volta.indice, 3);
 });
+
+test('ida e volta pela mesma estrada: logo na saída a fração não salta para a volta', () => {
+  // Ida de 0 a 0,1 grau de longitude e volta 5,5 m ao norte; a posição, logo depois do 1º ponto, fica mais perto de um
+  // ponto da volta do que do próximo da ida.
+  const ida: [number, number][] = Array.from({ length: 11 }, (_, k) => [0, k * 0.01]);
+  const volta: [number, number][] = Array.from({ length: 11 }, (_, k) => [0.00005, 0.1 - k * 0.01]);
+  const { fracao } = fracaoDoTrajeto([...ida, ...volta], { lat: 0.00005, lng: 0.0101 });
+  assert.ok(fracao > 0 && fracao < 0.2, `fração ${fracao} deveria ficar perto de 0,05`);
+});
