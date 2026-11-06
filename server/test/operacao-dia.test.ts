@@ -155,6 +155,34 @@ describe('planejamento do dia (RN20, RN23)', () => {
     const k = ctx.db.prepare('SELECT retirada_pendente AS r FROM contratos WHERE id = ?').get(ids[0]) as { r: number };
     assert.equal(k.r, 0);
   });
+
+  it('retirada pendente de cliente com contrato novo ativo é descartada, qualquer que seja a data', () => {
+    const { ctx, ids } = cenario([{ cliente: 1, freq: 'DIARIA', qtd: 2 }]);
+    editarContrato(ctx, ids[0], { quantidade: 2, frequencia: 'DIARIA', inicio: '2026-11-02', situacao: 'ENCERRADO' });
+    criarContrato(ctx, { clienteId: 1, quantidade: 3, frequencia: 'SEMANAL', diasSemana: [2], inicio: '2026-11-02' });
+    planejarDia(ctx, SEGUNDA);
+    assert.equal(contarParadas(ctx, SEGUNDA), 0);
+    const k = ctx.db.prepare('SELECT retirada_pendente AS r FROM contratos WHERE id = ?').get(ids[0]) as { r: number };
+    assert.equal(k.r, 0);
+    planejarDia(ctx, TERCA);
+    const paradas = roteirosDoDia(ctx.db, ctx.config, TERCA).roteiros.flatMap((r) => r.paradas);
+    assert.deepEqual(paradas.map((p) => [p.cliente.id, p.motivo, p.vazias]), [[1, 'COLETA', 3]]);
+  });
+
+  it('retirada de cliente sem nenhuma bombona não gera visita, e a pendência é zerada', () => {
+    const { ctx } = cenario();
+    const clienteId = Number(
+      ctx.db
+        .prepare("INSERT INTO clientes (nome, tipo, cidade, endereco, lat, lng) VALUES ('Cliente vazio', 'x', 'Cianorte', 'rua', -23.66, -52.6)")
+        .run().lastInsertRowid,
+    );
+    const { id } = criarContrato(ctx, { clienteId, quantidade: 1, frequencia: 'DIARIA', inicio: '2026-11-02' });
+    editarContrato(ctx, id, { quantidade: 1, frequencia: 'DIARIA', inicio: '2026-11-02', situacao: 'ENCERRADO' });
+    planejarDia(ctx, SEGUNDA);
+    assert.equal(contarParadas(ctx, SEGUNDA), 0);
+    const k = ctx.db.prepare('SELECT retirada_pendente AS r FROM contratos WHERE id = ?').get(id) as { r: number };
+    assert.equal(k.r, 0);
+  });
 });
 
 describe('saída dos furgões (RN24)', () => {

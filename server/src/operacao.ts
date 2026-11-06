@@ -178,7 +178,11 @@ function planejar(ctx: Contexto, data: string) {
     "SELECT COUNT(*) AS n FROM bombonas WHERE cliente_id = ? AND status = 'EM_CLIENTE' AND roteiro_id IS NULL",
   );
 
-  // Uma parada por cliente: a coleta já leva tudo, então cobre a retirada de um contrato encerrado do mesmo cliente.
+  // Bombonas que a troca procuraria no cliente (as "antigas" da Task 5).
+  const doCliente = db.prepare(
+    "SELECT COUNT(*) AS n FROM bombonas WHERE cliente_id = ? AND status IN ('EM_CLIENTE', 'EXTRAVIADA') AND roteiro_id IS NULL",
+  );
+
   const porCliente = new Map<number, Candidata>();
   const candidata = (k: LinhaContrato, motivo: MotivoParada, vazias: number): Candidata => {
     const { n } = noCliente.get(k.clienteId) as { n: number };
@@ -186,8 +190,14 @@ function planejar(ctx: Contexto, data: string) {
   };
   for (const k of contratos)
     if (k.situacao === 'ATIVO' && caiNaData(regraDoContrato(k), data)) porCliente.set(k.clienteId, candidata(k, 'COLETA', k.quantidade));
-  for (const k of contratos)
-    if (k.situacao === 'ENCERRADO' && !porCliente.has(k.clienteId)) porCliente.set(k.clienteId, candidata(k, 'RETIRADA', 0));
+  // Retirada pendente: descartada se o cliente já tem contrato novo ativo (a próxima coleta dele troca tudo) ou se
+  // não há bombona dele para buscar. Em todo caso a pendência é zerada: a retirada acontece no máximo uma vez.
+  const comContratoAtivo = new Set(contratos.filter((k) => k.situacao === 'ATIVO').map((k) => k.clienteId));
+  for (const k of contratos) {
+    if (k.situacao !== 'ENCERRADO' || comContratoAtivo.has(k.clienteId) || porCliente.has(k.clienteId)) continue;
+    if ((doCliente.get(k.clienteId) as { n: number }).n === 0) continue;
+    porCliente.set(k.clienteId, candidata(k, 'RETIRADA', 0));
+  }
   db.prepare("UPDATE contratos SET retirada_pendente = 0 WHERE situacao = 'ENCERRADO' AND retirada_pendente = 1").run();
 
   const { roteiros, naoAtendidas } = dividirEmRoteiros(config.patio, [...porCliente.values()], config.furgaoCapacidade, config.frotaMaxima);
@@ -201,6 +211,7 @@ function planejar(ctx: Contexto, data: string) {
     const roteiroId = Number(insRoteiro.run(data, i + 1).lastInsertRowid);
     grupo.forEach((p, j) => insParada.run(data, roteiroId, j + 1, p.clienteId, p.contratoId, p.motivo, p.vazias, p.demanda, 'PENDENTE', null));
   });
+  // RN23: o que não coube não é remarcado, nem a retirada (a pendência já foi zerada acima).
   for (const p of [...naoAtendidas].sort((a, b) => a.clienteId - b.clienteId)) {
     const motivo = p.demanda > config.furgaoCapacidade ? ACIMA_DA_CAPACIDADE : FORA_DA_FROTA;
     insParada.run(data, null, null, p.clienteId, p.contratoId, p.motivo, p.vazias, p.demanda, 'NAO_ATENDIDA', JSON.stringify(naoAtendida(motivo)));
@@ -235,6 +246,7 @@ function iniciar(ctx: Contexto, data: string): number[] {
   );
   const semVazias = db.prepare("UPDATE paradas SET status = 'NAO_ATENDIDA', roteiro_id = NULL, ordem = NULL, resultado = ? WHERE id = ?");
   const reordenar = db.prepare('UPDATE paradas SET ordem = ? WHERE id = ?');
+  const apagarRoteiro = db.prepare('DELETE FROM roteiros WHERE id = ?');
 
   const carregadas: number[] = [];
   const saem: number[] = [];
@@ -253,7 +265,7 @@ function iniciar(ctx: Contexto, data: string): number[] {
       }
       reordenar.run(++ordem, p.id);
     }
-    if (ordem === 0) db.prepare('DELETE FROM roteiros WHERE id = ?').run(r.id);
+    if (ordem === 0) apagarRoteiro.run(r.id);
     else saem.push(r.id);
   }
 
