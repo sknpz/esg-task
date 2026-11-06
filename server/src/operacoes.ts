@@ -1,4 +1,5 @@
 import { resolverAlertasDaBombona } from './alertas.ts';
+import { avaliarColeta, litrosEsperados } from './rendimento.ts';
 import { alertaPorId, bombonaDto, linhaBombonaPorCodigo } from './consultas.ts';
 import type { Contexto } from './contexto.ts';
 import { agoraIso, transacao } from './db.ts';
@@ -69,15 +70,22 @@ export function coletar(ctx: Contexto, codigo: string, entrada: { litros?: unkno
   }
 
   const alertas = transacao(ctx.db, () => {
+    // RN18: o esperado é calculado antes de registrar esta coleta, para não entrar na própria média.
+    const esperado = litros !== null && b.cliente_id !== null ? litrosEsperados(ctx.db, b.cliente_id, ctx.config.coletaHistoricoN) : null;
     ctx.db
       .prepare("UPDATE bombonas SET status = 'EM_ROTA', cliente_id = NULL, leituras_fora = 0, atualizado_em = ? WHERE id = ?")
       .run(agoraIso(), b.id);
     registrarMovimentacao(ctx, b.id, recuperacao ? 'RECUPERACAO' : 'COLETA', b.cliente_id, observacao, litros);
-    return resolverAlertasDaBombona(ctx.db, b.id, ['FORA_DA_AREA', 'EXTRAVIO'], {
+    const resolvidos = resolverAlertasDaBombona(ctx.db, b.id, ['FORA_DA_AREA', 'EXTRAVIO'], {
       por: 'OPERADOR',
       texto: observacao?.trim() || 'Bombona recolhida pela equipe de coleta',
       em: agoraIso(),
     });
+    const avisos =
+      litros !== null && b.cliente_id !== null
+        ? avaliarColeta(ctx.db, ctx.config, { bombonaId: b.id, clienteId: b.cliente_id, litros, esperado, em: agoraIso() })
+        : [];
+    return [...resolvidos, ...avisos];
   });
   return publicarBombona(ctx, b.id, alertas);
 }
