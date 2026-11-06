@@ -12,7 +12,7 @@
 
 import { consultarOsrm, criarFrota, type RoteiroRemoto } from './furgoes.ts';
 import { comprimentoM, distanciaM, M_POR_GRAU_LAT, mPorGrauLng, passoDaViagem, type Ponto } from './percurso.ts';
-import { consumoDeBateria, estenderSilencio, rodadaMudou, silencioDoCenarioMs } from './relogio.ts';
+import { consumoDeBateria, consumirSilencio, rodadaMudou, silencioDoCenarioMs } from './relogio.ts';
 
 type Local = Ponto & { nome: string; raioM: number };
 type Status = 'PATIO' | 'EM_ROTA' | 'EM_CLIENTE' | 'EXTRAVIADA';
@@ -49,7 +49,8 @@ type Aparelho = {
   devolvendo?: boolean;
   /** Vendida com o rastreador arrancado: não manda mais leitura e o furgão não a acha no cliente. */
   arrancada?: boolean;
-  caladoAte?: number;
+  /** Silêncio que falta (ms simulados); undefined = falando. */
+  caladoMs?: number;
   ticksParado: number;
   /** Caminho pelas ruas da viagem atual (pontos que ainda faltam). */
   rota?: { chave: string; pontos: Ponto[]; passo: number };
@@ -101,12 +102,10 @@ let patio: Ponto = { lat: -23.66, lng: -52.6 };
 let dispositivos: DispositivoRemoto[] = [];
 /** Data de operação vista no ciclo anterior: a venda do dia é sorteada quando ela muda. */
 let dataVista: string | undefined;
-/** Velocidade do ciclo em andamento (1x ou 2x). */
-let velocidadeAtual = 1;
 let frota: ReturnType<typeof criarFrota>;
 /** Rodada vista no ciclo anterior: um reset da simulação a muda e o simulador recomeça do zero. */
 let rodadaAtual: number | undefined;
-/** Instante do ciclo anterior: o tempo real decorrido estende o silêncio enquanto pausado. */
+/** Instante do ciclo anterior: o tempo real decorrido (vezes a velocidade) consome o silêncio. */
 let ultimoTickEm = Date.now();
 
 // ---------- geometria ----------
@@ -241,8 +240,8 @@ function aplicarComando(c: Comando) {
       console.log(`[${c.bombona}] cenário DEVOLUÇÃO: voltando para ${ap.remoto.alvo?.nome ?? 'o local esperado'}`);
       break;
     case 'SEM_SINAL':
-      const silencioMs = silencioDoCenarioMs(semSinalSegundos, velocidadeAtual);
-      ap.caladoAte = Date.now() + silencioMs;
+      const silencioMs = silencioDoCenarioMs(semSinalSegundos);
+      ap.caladoMs = silencioMs;
       console.log(`[${c.bombona}] cenário SEM SINAL: rastreador calado por ${Math.round(silencioMs / 1000)} s`);
       break;
     case 'BATERIA_FRACA':
@@ -359,7 +358,6 @@ async function tick() {
   const { pausado, velocidade, rodada } = operacao;
   const decorridoMs = Date.now() - ultimoTickEm;
   ultimoTickEm = Date.now();
-  velocidadeAtual = velocidade;
   // Reset: o servidor semeou tudo de novo (tokens e ids novos). Recomeça como se tivesse acabado de subir, antes de
   // sincronizar; envios velhos ainda no ar só mexem em objetos descartados.
   if (rodadaMudou(rodadaAtual, rodada)) {
@@ -388,11 +386,11 @@ async function tick() {
 
     // Rastreador calado: a bombona continua andando (uma venda com o sinal cortado leva ela embora de verdade); só
     // a leitura não sai.
-    // Pausado, o servidor congela o prazo de "sem sinal": o silêncio acompanha.
-    ap.caladoAte = estenderSilencio(ap.caladoAte, pausado, decorridoMs);
-    const calado = ap.caladoAte !== undefined && ap.caladoAte > Date.now();
-    if (ap.caladoAte && !calado) {
-      ap.caladoAte = undefined;
+    // O silêncio conta em tempo simulado, como o prazo do servidor: congela pausado e corre dobrado em 2x.
+    ap.caladoMs = consumirSilencio(ap.caladoMs, pausado, velocidade, decorridoMs);
+    const calado = ap.caladoMs !== undefined && ap.caladoMs > 0;
+    if (ap.caladoMs !== undefined && !calado) {
+      ap.caladoMs = undefined;
       console.log(`[${ap.remoto.bombona}] sinal de volta`);
     }
 

@@ -165,8 +165,8 @@ test('em 2x o furgão anda o dobro por ciclo', async () => {
     assert.ok(d1 > 20, `d1: ${d1}`);
     assert.ok(Math.abs(d2 - 2 * d1) < 0.5, `d1: ${d1}, d2: ${d2}`);
   } finally {
-    a.restaurar();
     b.restaurar();
+    a.restaurar();
   }
 });
 
