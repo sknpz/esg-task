@@ -161,11 +161,12 @@ export function listarClientes(db: Banco) {
       `SELECT c.id, c.nome, c.tipo, c.cidade, c.endereco, c.lat, c.lng, c.raio_m AS raioM,
               (SELECT COUNT(*) FROM bombonas b WHERE b.cliente_id = c.id AND b.status IN ('EM_CLIENTE', 'EXTRAVIADA')) AS bombonas,
               (SELECT COUNT(*) FROM alertas a WHERE a.cliente_id = c.id AND a.tipo = 'FORA_DA_AREA' AND a.reaberto = 0) AS incidentes,
-              (SELECT MAX(a.aberto_em) FROM alertas a WHERE a.cliente_id = c.id AND a.tipo = 'FORA_DA_AREA' AND a.reaberto = 0) AS ultimoIncidente
+              (SELECT MAX(a.aberto_em) FROM alertas a WHERE a.cliente_id = c.id AND a.tipo = 'FORA_DA_AREA' AND a.reaberto = 0) AS ultimoIncidente,
+              EXISTS (SELECT 1 FROM contratos k WHERE k.cliente_id = c.id AND k.situacao = 'ATIVO') AS contratoAtivo
        FROM clientes c ORDER BY incidentes DESC, c.nome`,
     )
-    .all() as Array<{ incidentes: number }>;
-  return linhas.map((c) => ({ ...c, risco: nivelRisco(c.incidentes) }));
+    .all() as Array<{ incidentes: number; contratoAtivo: number }>;
+  return linhas.map((c) => ({ ...c, contratoAtivo: c.contratoAtivo === 1, risco: nivelRisco(c.incidentes) }));
 }
 
 export function listarAlertas(db: Banco, filtro: { status?: string; bombonaId?: number; limite?: number } = {}) {

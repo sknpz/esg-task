@@ -17,6 +17,7 @@ export type Config = {
   bateriaRecuperada: number;
   coletaHistoricoN: number;
   coletaMinimoPct: number;
+  dataInicialOperacao: string;
   tokenSimulador: string;
   simulacaoAtiva: boolean;
 };
@@ -39,6 +40,7 @@ export function carregarConfig(): Config {
     bateriaRecuperada: num('BATERIA_RECUPERADA', 30),
     coletaHistoricoN: num('COLETA_HISTORICO_N', 3),
     coletaMinimoPct: num('COLETA_MINIMO_PCT', 50),
+    dataInicialOperacao: process.env.DATA_INICIAL_OPERACAO ?? '2026-11-09',
     tokenSimulador: process.env.SIM_TOKEN ?? 'sim-demo-token',
     // Canal de controle da demonstração; desligue com SIMULACAO=off.
     simulacaoAtiva: process.env.SIMULACAO !== 'off',
