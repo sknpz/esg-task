@@ -3,7 +3,7 @@ import { afterEach, describe, it } from 'node:test';
 import type { Contexto } from '../src/contexto.ts';
 import type { Evento } from '../src/eventos.ts';
 import { continuar, definirVelocidade, estadoOperacao, pausar } from '../src/operacao.ts';
-import { verificarSemSinal } from '../src/regras.ts';
+import { processarLeitura, verificarSemSinal } from '../src/regras.ts';
 import { criarContexto, subirApi } from './apoio.ts';
 
 type Ponto = { lat: number; lng: number };
@@ -229,5 +229,17 @@ describe('sem sinal e o player da simulação', () => {
     continuar(ctx, 2_060_000); // 60 s pausado
     const { ultimo_sinal } = ctx.db.prepare('SELECT ultimo_sinal FROM dispositivos LIMIT 1').get() as { ultimo_sinal: string };
     assert.equal(Date.parse(ultimo_sinal), 2_050_000);
+  });
+
+  it('quem reportou durante a pausa não vai para o futuro e a leitura seguinte não é atrasada', () => {
+    const ctx = criarContexto();
+    continuar(ctx, 1_000_000);
+    pausar(ctx, 2_000_000);
+    ctx.db.prepare('UPDATE dispositivos SET ultimo_sinal = ?').run(new Date(2_055_000).toISOString());
+    continuar(ctx, 2_060_000);
+    const { id, ultimo_sinal } = ctx.db.prepare('SELECT id, ultimo_sinal FROM dispositivos LIMIT 1').get() as { id: string; ultimo_sinal: string };
+    assert.equal(Date.parse(ultimo_sinal), 2_060_000);
+    const r = processarLeitura(ctx, id, { lat: -23.4, lng: -51.9, precisao: 5, bateria: 90, registradoEm: new Date(2_061_000).toISOString() });
+    assert.equal(r.atrasada, false);
   });
 });
