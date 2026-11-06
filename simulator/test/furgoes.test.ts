@@ -93,11 +93,19 @@ test('avancar anda pelo caminho e para no limite (a parada), sem passar dele', (
   assert.deepEqual([parada.chegou, parada.proximo, parada.posicao], [true, 3, pontos[2]]);
 });
 
-test('montarEncontradas usa a capacidade de cada bombona e, sem como casar, a menor', () => {
-  const parada = { litrosEsperados: null, capacidades: [50, 200] };
+test('montarEncontradas leva as procuradas que estão lá, com a capacidade de cada uma pelo código', () => {
+  const parada = {
+    litrosEsperados: null,
+    procuradas: [
+      { codigo: 'BO-0001', capacidadeL: 50 },
+      { codigo: 'BO-0002', capacidadeL: 200 },
+    ],
+  };
   const meio = () => 0.5; // sem variação: 70% da capacidade
-  assert.deepEqual(montarEncontradas(parada, ['BO-0001', 'BO-0002'], ['BO-0002'], meio), [{ codigo: 'BO-0002', litros: 140 }]);
-  // Uma procurada a mais no simulador (já registrada como sumida no servidor): não dá para casar pela ordem.
-  assert.deepEqual(montarEncontradas(parada, ['BO-0001', 'BO-0002', 'BO-0003'], ['BO-0002'], meio), [{ codigo: 'BO-0002', litros: 35 }]);
-  assert.deepEqual(montarEncontradas(parada, ['BO-0001', 'BO-0002'], [], meio), []);
+  assert.deepEqual(montarEncontradas(parada, (c) => c === 'BO-0002', meio), [{ codigo: 'BO-0002', litros: 140 }]);
+  assert.deepEqual(montarEncontradas(parada, () => true, meio), [
+    { codigo: 'BO-0001', litros: 35 },
+    { codigo: 'BO-0002', litros: 140 },
+  ]);
+  assert.deepEqual(montarEncontradas(parada, () => false, meio), []);
 });

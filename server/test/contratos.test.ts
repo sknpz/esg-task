@@ -4,7 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
+import { criarContrato, dataOperacao, listarContratos } from '../src/contratos.ts';
 import { abrirBanco, VERSAO_ESQUEMA } from '../src/db.ts';
+import { estadoOperacao } from '../src/operacao.ts';
 import { criarContexto, subirApi } from './apoio.ts';
 
 const ctx = criarContexto();
@@ -78,6 +80,16 @@ describe('contratos (RN19)', () => {
     assert.equal(linha.r, 1);
     assert.equal((await put(`/contratos/${c.corpo.id}`, base(id))).status, 409);
     assert.equal((await post('/contratos', base(id))).status, 201);
+  });
+
+  it('contrato criado depois do planejamento do dia não lista hoje como próxima coleta', () => {
+    const c = criarContexto({ fasePausaS: 0 });
+    estadoOperacao(c); // manhã de segunda 09/11: o dia já é planejado ao entrar
+    const novo = criarContrato(c, { clienteId: 50, quantidade: 1, frequencia: 'DIARIA', inicio: '2026-11-02' });
+    assert.deepEqual(novo.proximas, ['2026-11-10', '2026-11-11', '2026-11-12']);
+    // Contrato com parada hoje continua mostrando hoje (cliente 1: diária no seed).
+    const doCliente1 = listarContratos(c.db, dataOperacao(c)).find((k) => k.clienteId === 1)!;
+    assert.deepEqual(doCliente1.proximas, ['2026-11-09', '2026-11-10', '2026-11-11']);
   });
 
   it('lista clientes com contratoAtivo', async () => {

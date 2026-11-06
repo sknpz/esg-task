@@ -573,7 +573,8 @@ describe('API dos furgões (simulador)', () => {
     assert.equal((await chamar(`/roteiros/${roteiro.id}/posicao`, { lat: 'x', lng: 1 })).status, 400);
     const p = await chamar(`/roteiros/${roteiro.id}/posicao`, { lat: -23.68, lng: -52.62 });
     assert.equal(p.status, 200);
-    assert.deepEqual(p.corpo.posicao, { lat: -23.68, lng: -52.62 });
+    // Resposta curta: a posição chega a cada passo do furgão.
+    assert.deepEqual(p.corpo, { ok: true });
     assert.deepEqual(roteirosDoDia(ctx.db, ctx.config, SEGUNDA).roteiros[0].posicao, { lat: -23.68, lng: -52.62 });
     // A posição vai num evento leve, sem o roteiro inteiro (o trajeto pode ser grande).
     const depoisDoTrajeto = eventos.slice(eventos.findIndex((e) => e.tipo === 'roteiro') + 1);
@@ -643,7 +644,10 @@ describe('API dos furgões (simulador)', () => {
         lat: cliente.lat,
         lng: cliente.lng,
         litrosEsperados: litrosEsperados(ctx.db, 1, ctx.config.coletaHistoricoN),
-        capacidades: [50, 50],
+        procuradas: [
+          { codigo: 'BO-0001', capacidadeL: 50 },
+          { codigo: 'BO-0002', capacidadeL: 50 },
+        ],
       },
     ]);
     const d = estado.dispositivos.find((x: { bombona: string }) => x.bombona === 'BO-0018');
@@ -651,10 +655,10 @@ describe('API dos furgões (simulador)', () => {
     const parada = estado.dispositivos.find((x: { bombona: string }) => x.bombona === 'BO-0009');
     assert.deepEqual([parada.roteiroId, parada.clienteId], [null, 6]);
 
-    // Parada feita não precisa mais das capacidades.
+    // Parada feita não precisa mais das procuradas.
     registrarTroca(ctx, roteiro.id, roteiro.paradas[0].id, { encontradas: [{ codigo: 'BO-0001', litros: 30 }] });
     const [feita] = (await chamar('/simulacao/estado')).corpo.roteiros[0].paradas;
-    assert.deepEqual([feita.status, feita.capacidades], ['FEITA', []]);
+    assert.deepEqual([feita.status, feita.procuradas], ['FEITA', []]);
 
     concluirRoteiro(ctx, roteiro.id);
     assert.deepEqual((await chamar('/simulacao/estado')).corpo.roteiros, []);

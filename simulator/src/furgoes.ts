@@ -19,7 +19,8 @@ export type ParadaRemota = {
   lat: number;
   lng: number;
   litrosEsperados: number | null;
-  capacidades: number[];
+  /** As bombonas que a troca do servidor procura no cliente, com a capacidade de cada uma (vazia se não PENDENTE). */
+  procuradas: { codigo: string; capacidadeL: number }[];
 };
 export type RoteiroRemoto = { id: number; numero: number; paradas: ParadaRemota[]; bombonas: string[] };
 export type Tempo = { duracaoS: number; pausaMs: number; tickMs: number };
@@ -112,23 +113,17 @@ export function avancar(pontos: Ponto[], posicao: Ponto, proximo: number, passo:
 }
 
 /**
- * O corpo da troca: as bombonas achadas no cliente, com litros gerados pela capacidade de cada uma. `capacidades`
- * vem do servidor na ordem das bombonas procuradas (por código); se as listas não baterem, usa a menor capacidade,
- * que o servidor sempre aceita.
+ * O corpo da troca: das bombonas que o servidor procura no cliente, as que estão lá de fato (`estaLa`, quem sabe é o
+ * simulador), com litros gerados pela capacidade de cada uma.
  */
 export function montarEncontradas(
-  parada: Pick<ParadaRemota, 'litrosEsperados' | 'capacidades'>,
-  procuradas: string[],
-  achadas: string[],
+  parada: Pick<ParadaRemota, 'litrosEsperados' | 'procuradas'>,
+  estaLa: (codigo: string) => boolean,
   rnd: () => number,
 ): Encontrada[] {
-  const alinhadas = procuradas.length === parada.capacidades.length;
-  const menor = parada.capacidades.length ? Math.min(...parada.capacidades) : 50;
-  return achadas.map((codigo) => {
-    const i = procuradas.indexOf(codigo);
-    const capacidade = alinhadas && i >= 0 ? parada.capacidades[i] : menor;
-    return { codigo, litros: gerarLitros(parada.litrosEsperados, capacidade, rnd) };
-  });
+  return parada.procuradas
+    .filter((b) => estaLa(b.codigo))
+    .map((b) => ({ codigo: b.codigo, litros: gerarLitros(parada.litrosEsperados, b.capacidadeL, rnd) }));
 }
 
 // ---------- OSRM ----------
@@ -155,8 +150,8 @@ export type OpcoesFrota = {
   tempo: Tempo;
   passoBaseM: number;
   esperaEntreTentativasMs: number;
-  /** Bombonas do cliente: as que o servidor procura (por código) e as que o simulador sabe que estão lá. */
-  noCliente: (clienteId: number) => { procuradas: string[]; achadas: string[] };
+  /** Se a bombona (por código) está de fato no cliente: o simulador é quem sabe o que foi vendido. */
+  estaNoCliente: (codigo: string) => boolean;
 };
 
 type Tentativa = { ocupado: boolean; proximaEm: number };
@@ -259,13 +254,20 @@ export function criarFrota(op: OpcoesFrota) {
     }
   }
 
-  /** POST da troca ou da conclusão. 404/409 (já feita, roteiro encerrado) também encerram o passo. */
+  /**
+   * POST da troca ou da conclusão. 404/409 (já feita, roteiro encerrado) também encerram o passo. 400 (corpo
+   * recusado) não melhora tentando de novo: segue como feito sem resultado (a parada vira NAO_ATENDIDA quando o
+   * roteiro é concluído). 5xx e erro de rede tentam de novo.
+   */
   async function enviar(f: Furgao, caminho: string, corpo: unknown, feito: (resposta: unknown) => void) {
     if (f.envio.ocupado || Date.now() < f.envio.proximaEm) return;
     f.envio.ocupado = true;
     try {
       const r = await postar(caminho, corpo);
-      if (r.status === 404 || r.status === 409) {
+      if (r.status === 400) {
+        console.error(`[${nome(f)}] ${caminho}: recusado (HTTP 400) ${await r.text()}; seguindo sem resultado`);
+        feito(null);
+      } else if (r.status === 404 || r.status === 409) {
         console.warn(`[${nome(f)}] ${caminho}: HTTP ${r.status} ${await r.text()}`);
         feito(null);
       } else if (!r.ok) {
@@ -282,10 +284,9 @@ export function criarFrota(op: OpcoesFrota) {
   }
 
   function trocar(f: Furgao, alvo: { parada: ParadaRemota }) {
-    // A parada no estado mais recente do servidor (as capacidades refletem o que ele procura agora).
+    // A parada no estado mais recente do servidor (as procuradas refletem o que ele procura agora).
     const parada = f.roteiro.paradas.find((p) => p.id === alvo.parada.id) ?? alvo.parada;
-    const { procuradas, achadas } = op.noCliente(parada.clienteId);
-    const encontradas = montarEncontradas(parada, procuradas, achadas, Math.random);
+    const encontradas = montarEncontradas(parada, op.estaNoCliente, Math.random);
     void enviar(f, `/roteiros/${f.roteiro.id}/paradas/${parada.id}/troca`, { encontradas }, (resposta) => {
       if (f.rota?.paradas[0]?.parada.id === parada.id) f.rota.paradas.shift();
       const r = (resposta as { resultado?: { deixadas: string[]; levadas: Encontrada[]; naoEncontradas: { codigo: string }[] } } | null)

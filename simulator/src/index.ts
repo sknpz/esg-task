@@ -268,19 +268,14 @@ function vendasDoDia(data: string, pausado: boolean) {
 }
 
 /**
- * O que o furgão encontra no cliente. `procuradas`: as do cliente fora de furgão, paradas lá ou extraviadas (na ordem
- * do servidor). `achadas`: as que estão lá de fato, isto é, em cliente no servidor e não vendidas (com ou sem o
- * rastreador).
+ * Se o furgão encontra a bombona no cliente: ela está lá de fato, isto é, em cliente no servidor e não vendida (com
+ * ou sem o rastreador). Quais procurar vem do servidor (as `procuradas` de cada parada).
  */
-function noCliente(clienteId: number) {
-  const doCliente = dispositivos.filter(
-    (d) => d.clienteId === clienteId && d.roteiroId === null && (d.status === 'EM_CLIENTE' || d.status === 'EXTRAVIADA'),
-  );
-  const achadas = doCliente.filter((d) => {
-    const ap = aparelhos.get(d.dispositivoId);
-    return d.status === 'EM_CLIENTE' && !ap?.desvio && !ap?.arrancada;
-  });
-  return { procuradas: doCliente.map((d) => d.bombona), achadas: achadas.map((d) => d.bombona) };
+function estaNoCliente(codigo: string) {
+  const d = dispositivos.find((x) => x.bombona === codigo);
+  if (!d || d.status !== 'EM_CLIENTE') return false;
+  const ap = aparelhos.get(d.dispositivoId);
+  return !ap?.desvio && !ap?.arrancada;
 }
 
 // ---------- ciclo ----------
@@ -395,7 +390,7 @@ async function aguardarApi() {
         tempo: { duracaoS: DURACAO_ROTEIRO_S, pausaMs: PAUSA_PARADA_MS, tickMs: TICK_MS },
         passoBaseM: PASSO_FURGAO_M,
         esperaEntreTentativasMs: ESPERA_ENTRE_TENTATIVAS_MS,
-        noCliente,
+        estaNoCliente,
       });
       return;
     } catch {

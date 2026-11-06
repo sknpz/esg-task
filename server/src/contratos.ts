@@ -1,6 +1,6 @@
 import type { Contexto } from './contexto.ts';
 import { agoraIso, type Banco } from './db.ts';
-import { proximasColetas, validarRegra, type Frequencia, type RegraContrato } from './calendario.ts';
+import { proximasColetas, proximoDiaOperacao, validarRegra, type Frequencia, type RegraContrato } from './calendario.ts';
 import { ErroDeNegocio } from './operacoes.ts';
 
 export type ContratoDto = {
@@ -39,7 +39,20 @@ export function regraDoContrato(l: { frequencia: Frequencia; diasSemana: string;
   return { frequencia: l.frequencia, diasSemana, diaMes: l.diaMes, inicio: l.inicio };
 }
 
-function paraDto(l: Linha, hoje: string): ContratoDto {
+/**
+ * De onde contar as próximas coletas de cada contrato. Se o dia de hoje já foi planejado (há paradas nele), o contrato
+ * sem parada hoje só coleta a partir do próximo dia de operação (RN20: o planejamento não é refeito). Prepara a
+ * consulta uma vez; devolve a função por contrato.
+ */
+function inicioDasProximas(db: Banco, hoje: string): (contratoId: number) => string {
+  const linhas = db.prepare('SELECT DISTINCT contrato_id AS id FROM paradas WHERE data = ?').all(hoje) as Array<{ id: number }>;
+  if (linhas.length === 0) return () => hoje;
+  const comParada = new Set(linhas.map((p) => p.id));
+  const seguinte = proximoDiaOperacao(hoje);
+  return (contratoId) => (comParada.has(contratoId) ? hoje : seguinte);
+}
+
+function paraDto(l: Linha, aPartirDe: string): ContratoDto {
   const regra = regraDoContrato(l);
   const { diasSemana } = regra;
   return {
@@ -52,7 +65,7 @@ function paraDto(l: Linha, hoje: string): ContratoDto {
     diaMes: l.diaMes,
     inicio: l.inicio,
     situacao: l.situacao,
-    proximas: l.situacao === 'ATIVO' ? proximasColetas(regra, hoje, 3) : [],
+    proximas: l.situacao === 'ATIVO' ? proximasColetas(regra, aPartirDe, 3) : [],
   };
 }
 
@@ -64,12 +77,13 @@ export function dataOperacao(ctx: Contexto): string {
 
 export function listarContratos(db: Banco, hoje: string): ContratoDto[] {
   const linhas = db.prepare(`${SELECT} ORDER BY c.nome, k.id`).all() as Linha[];
-  return linhas.map((l) => paraDto(l, hoje));
+  const inicio = inicioDasProximas(db, hoje);
+  return linhas.map((l) => paraDto(l, inicio(l.id)));
 }
 
 export function contratoPorId(db: Banco, id: number, hoje: string): ContratoDto | undefined {
   const l = db.prepare(`${SELECT} WHERE k.id = ?`).get(id) as Linha | undefined;
-  return l ? paraDto(l, hoje) : undefined;
+  return l ? paraDto(l, inicioDasProximas(db, hoje)(l.id)) : undefined;
 }
 
 function regraDaEntrada(entrada: unknown): { regra: RegraContrato; quantidade: number } {

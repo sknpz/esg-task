@@ -116,7 +116,8 @@ export function rotasDeSimulacao(ctx: Contexto) {
         (p) => ({
           ...p,
           litrosEsperados: litrosEsperados(db, p.clienteId, config.coletaHistoricoN),
-          capacidades: p.status === 'PENDENTE' ? procuradas(p.clienteId).map((b) => b.capacidade_l) : [],
+          // Quais bombonas a troca procura e a capacidade de cada uma, por código.
+          procuradas: p.status === 'PENDENTE' ? procuradas(p.clienteId).map((b) => ({ codigo: b.codigo, capacidadeL: b.capacidade_l })) : [],
         }),
       ),
       bombonas: (noFurgao.all(r.id) as Array<{ codigo: string }>).map((b) => b.codigo),

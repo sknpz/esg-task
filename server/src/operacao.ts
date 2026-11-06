@@ -601,15 +601,15 @@ export function registrarTrajeto(ctx: Contexto, roteiroId: number, entrada: { po
   return publicarRoteiro(ctx, roteiroId);
 }
 
-/** Posição atual do furgão. */
-export function registrarPosicao(ctx: Contexto, roteiroId: number, entrada: { lat: number; lng: number }): RoteiroDto {
+/** Posição atual do furgão. Resposta curta: chega a cada passo do furgão. */
+export function registrarPosicao(ctx: Contexto, roteiroId: number, entrada: { lat: number; lng: number }): { ok: true } {
   const { lat, lng } = (entrada ?? {}) as { lat?: unknown; lng?: unknown };
   if (!numeroFinito(lat) || !numeroFinito(lng)) throw new ErroDeNegocio(400, 'lat e lng devem ser números');
   exigirEmAndamento(ctx.db, roteiroId);
   ctx.db.prepare('UPDATE roteiros SET lat = ?, lng = ? WHERE id = ?').run(lat, lng, roteiroId);
   // Evento leve: a posição chega a cada passo do furgão; o roteiro inteiro (com o trajeto) só nas mudanças.
   ctx.eventos.emitir({ tipo: 'furgao', dados: { roteiroId, lat, lng } });
-  return roteiroDto(ctx.db, ctx.config, roteiroId)!;
+  return { ok: true };
 }
 
 /**
