@@ -22,6 +22,9 @@ type Contrato = { cliente: number; freq: 'DIARIA' | 'SEMANAL'; dias?: number[]; 
 function cenario(contratos: Contrato[] = [], ajustes: Partial<Config> = {}) {
   const ctx = criarContexto({ fasePausaS: 0, ...ajustes });
   ctx.db.exec('DELETE FROM contratos');
+  // Estes testes contam com as 5 vazias do pátio do seed antigo: as demais do estoque (RN24) saem de cena.
+  ctx.db.exec(`UPDATE bombonas SET status = 'EXTRAVIADA' WHERE status = 'PATIO'
+                 AND id NOT IN (SELECT id FROM bombonas WHERE status = 'PATIO' ORDER BY codigo LIMIT 5)`);
   const ids = contratos.map(
     (c) =>
       criarContrato(ctx, { clienteId: c.cliente, quantidade: c.qtd, frequencia: c.freq, diasSemana: c.dias ?? [], inicio: '2026-11-02' }).id,

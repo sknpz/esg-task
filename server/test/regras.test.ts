@@ -157,7 +157,7 @@ describe('motor de regras', () => {
   it('abre SEM_SINAL na varredura e fecha quando chega leitura (RN10)', async () => {
     const c = await cenario();
     const abertos = verificarSemSinal(c.ctx, Date.now() + (c.ctx.config.semSinalSegundos + 5) * 1000);
-    assert.equal(abertos.length, 35);
+    assert.equal(abertos.length, 101);
     assert.equal(verificarSemSinal(c.ctx, Date.now() + 3_600_000).length, 0, 'não duplica');
     await c.enviar('BO-0004', await clienteDe(c, 'BO-0004'));
     assert.deepEqual(await c.abertos('BO-0004'), []);
