@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS movimentacoes (
   tipo        TEXT    NOT NULL,
   cliente_id  INTEGER REFERENCES clientes (id),
   observacao  TEXT,
+  litros      INTEGER,
   criado_em   TEXT    NOT NULL
 );
 
@@ -64,7 +65,7 @@ CREATE TABLE IF NOT EXISTS alertas (
   id            INTEGER PRIMARY KEY,
   bombona_id    INTEGER NOT NULL REFERENCES bombonas (id),
   cliente_id    INTEGER REFERENCES clientes (id),
-  tipo          TEXT    NOT NULL CHECK (tipo IN ('FORA_DA_AREA', 'EXTRAVIO', 'SEM_SINAL', 'BATERIA_BAIXA')),
+  tipo          TEXT    NOT NULL CHECK (tipo IN ('FORA_DA_AREA', 'EXTRAVIO', 'SEM_SINAL', 'BATERIA_BAIXA', 'COLETA_ABAIXO')),
   severidade    TEXT    NOT NULL CHECK (severidade IN ('INFO', 'AVISO', 'CRITICO')),
   mensagem      TEXT    NOT NULL,
   status        TEXT    NOT NULL DEFAULT 'ABERTO' CHECK (status IN ('ABERTO', 'RESOLVIDO')),
@@ -88,14 +89,26 @@ CREATE TABLE IF NOT EXISTS simulacao_comandos (
 );
 `;
 
+/** Versão do esquema; um banco mais antigo é descartado e recriado (os dados são de demonstração). */
+export const VERSAO_ESQUEMA = 2;
+
+function descartarSeDesatualizado(caminho: string) {
+  if (caminho === ':memory:' || !fs.existsSync(caminho)) return;
+  const existente = new DatabaseSync(caminho);
+  const tabelas = (existente.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'").get() as { n: number }).n;
+  const versao = (existente.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+  existente.close();
+  if (tabelas === 0 || versao >= VERSAO_ESQUEMA) return;
+  for (const sufixo of ['', '-wal', '-shm']) fs.rmSync(caminho + sufixo, { force: true });
+}
+
 export function abrirBanco(caminho: string): Banco {
   if (caminho !== ':memory:') fs.mkdirSync(path.dirname(caminho), { recursive: true });
+  descartarSeDesatualizado(caminho);
   const db = new DatabaseSync(caminho);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   db.exec(ESQUEMA);
-  // Bancos criados antes da coluna `reaberto`.
-  const colunas = db.prepare('PRAGMA table_info(alertas)').all() as Array<{ name: string }>;
-  if (!colunas.some((c) => c.name === 'reaberto')) db.exec('ALTER TABLE alertas ADD COLUMN reaberto INTEGER NOT NULL DEFAULT 0');
+  db.exec(`PRAGMA user_version = ${VERSAO_ESQUEMA}`);
   return db;
 }
 

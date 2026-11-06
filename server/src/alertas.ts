@@ -1,7 +1,7 @@
 import { alertaPorId } from './consultas.ts';
 import type { Banco } from './db.ts';
 
-export type TipoAlerta = 'FORA_DA_AREA' | 'EXTRAVIO' | 'SEM_SINAL' | 'BATERIA_BAIXA';
+export type TipoAlerta = 'FORA_DA_AREA' | 'EXTRAVIO' | 'SEM_SINAL' | 'BATERIA_BAIXA' | 'COLETA_ABAIXO';
 export type Severidade = 'INFO' | 'AVISO' | 'CRITICO';
 
 /** Abre um alerta se ainda não houver um aberto do mesmo tipo (RN12). Devolve o alerta criado ou `null`. */
