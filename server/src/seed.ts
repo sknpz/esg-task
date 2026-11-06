@@ -35,7 +35,7 @@ const CLIENTES = [
   { nome: 'Pastelaria Massa Crocante', tipo: 'Pastelaria', cidade: 'Cianorte', endereco: 'Rua Abolição, 310', lat: -23.65874, lng: -52.60409 },
   { nome: 'Lanchonete Chapa Quente', tipo: 'Lanchonete', cidade: 'Cianorte', endereco: 'Av. Paraná, 1450', lat: -23.65876, lng: -52.61003 },
   { nome: 'Hotel Ipê Amarelo', tipo: 'Hotel', cidade: 'Cianorte', endereco: 'Rua XV de Novembro, 520', lat: -23.65433, lng: -52.60292 },
-  { nome: 'Churrascaria Fogo de Chão Norte', tipo: 'Churrascaria', cidade: 'Cianorte', endereco: 'Av. Brasil, 2780', lat: -23.65339, lng: -52.61211 },
+  { nome: 'Churrascaria Brasa Norte', tipo: 'Churrascaria', cidade: 'Cianorte', endereco: 'Av. Brasil, 2780', lat: -23.65339, lng: -52.61211 },
   { nome: 'Padaria Doce Manhã', tipo: 'Padaria', cidade: 'Cianorte', endereco: 'Av. Amazonas, 905', lat: -23.66399, lng: -52.60221 },
   { nome: 'Cozinha Industrial Prato Cheio', tipo: 'Cozinha industrial', cidade: 'Cianorte', endereco: 'Rua Curitiba, 1800', lat: -23.65063, lng: -52.60713 },
   { nome: 'Lanchonete Casa do Pastel', tipo: 'Lanchonete', cidade: 'Tapejara', endereco: 'Rua Duque de Caxias, 210', lat: -23.7317, lng: -52.87058 },
