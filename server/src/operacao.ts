@@ -346,7 +346,7 @@ export const esquecerPausa = (db: Banco) => void inicioDaPausa.delete(db);
  * Cria a operação da rodada: data inicial, de manhã, pausada, 1x, e já planeja esse dia (a manhã planeja ao
  * começar). Sem eventos: quem chama decide o que publicar.
  */
-export function criarOperacao(ctx: Contexto, rodada: number): EstadoOperacao {
+export function criarOperacao(ctx: Contexto, rodada: number, agora = Date.now()): EstadoOperacao {
   const data = ctx.config.dataInicialOperacao;
   transacao(ctx.db, () => {
     ctx.db
@@ -354,6 +354,8 @@ export function criarOperacao(ctx: Contexto, rodada: number): EstadoOperacao {
       .run(data, agoraIso(), rodada);
     planejar(ctx, data);
   });
+  // Nasce pausada: o primeiro ▶ também desloca o último sinal dos rastreadores.
+  inicioDaPausa.set(ctx.db, agora);
   return paraEstado(lerLinha(ctx.db)!, ctx.config);
 }
 

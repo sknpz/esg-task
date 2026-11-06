@@ -53,6 +53,7 @@ export function rotasDeRoteiros(ctx: Contexto) {
   });
 
   r.post('/operacao/reset', (_req, res) => {
+    if (!ctx.config.simulacaoAtiva) return void res.status(404).json({ erro: 'Simulação desligada (SIMULACAO=off)' });
     res.json(resetarSimulacao(ctx));
   });
 

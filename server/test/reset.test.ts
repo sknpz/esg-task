@@ -43,6 +43,18 @@ describe('reset', () => {
     assert.equal(estadoOperacao(ctx).rodada, 3);
   });
 
+  it('com SIMULACAO=off o reset responde 404', async () => {
+    const ctx = criarContexto({ simulacaoAtiva: false });
+    const api = await subirApi(ctx);
+    try {
+      const r = await fetch(`${api.url}/operacao/reset`, { method: 'POST' });
+      assert.equal(r.status, 404);
+      assert.equal(estadoOperacao(ctx).rodada, 1);
+    } finally {
+      await api.fechar();
+    }
+  });
+
   it('reset emite "reset" com o estado novo antes de "operacao"', () => {
     const ctx = criarContexto();
     estadoOperacao(ctx);

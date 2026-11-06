@@ -8,6 +8,7 @@ import type { Evento } from '../src/eventos.ts';
 import {
   avancarOperacao,
   continuar,
+  criarOperacao,
   estadoOperacao,
   iniciarRoteiros,
   pausar,
@@ -350,6 +351,18 @@ describe('relógio da operação', () => {
     assert.equal(continuar(ctx).pausado, false);
     avancarOperacao(ctx);
     assert.equal(estadoOperacao(ctx).fase, 'ROTAS');
+  });
+
+  it('a operação nasce pausada e o primeiro continuar desloca o último sinal', () => {
+    const { ctx } = cenario([]);
+    const t0 = Date.now();
+    criarOperacao(ctx, 1, t0);
+    assert.equal(estadoOperacao(ctx).pausado, true);
+    const antigo = new Date(t0 - 10_000).toISOString();
+    ctx.db.prepare('UPDATE dispositivos SET ultimo_sinal = ?').run(antigo);
+    continuar(ctx, t0 + 4_000);
+    const sinais = new Set((ctx.db.prepare('SELECT ultimo_sinal FROM dispositivos').all() as Array<{ ultimo_sinal: string }>).map((d) => d.ultimo_sinal));
+    assert.deepEqual([...sinais], [new Date(t0 - 6_000).toISOString()]);
   });
 
   it('a pausa estende a fase pelo tempo pausado', () => {
