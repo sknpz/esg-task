@@ -19,7 +19,7 @@ const CLIENTES = [
   { nome: 'Pizzaria Forno a Lenha', tipo: 'Pizzaria', cidade: 'Indianópolis', endereco: 'Av. Rio de Janeiro, 230', lat: -23.4764, lng: -52.6986 },
   { nome: 'Lanchonete Trevo', tipo: 'Lanchonete', cidade: 'Tuneiras do Oeste', endereco: 'Rod. PR-323, trevo de acesso', lat: -23.8697, lng: -52.8761 },
   // Escala real: pontos em ruas do centro de cada cidade (o roteador precisa alcançá-los).
-  { nome: 'Churrascaria Fogo de Chão Norte', tipo: 'Churrascaria', cidade: 'Umuarama', endereco: 'Av. Paraná, 2100', lat: -23.766, lng: -53.325 },
+  { nome: 'Churrascaria Brasa Serrana', tipo: 'Churrascaria', cidade: 'Umuarama', endereco: 'Av. Paraná, 2100', lat: -23.766, lng: -53.325 },
   { nome: 'Restaurante Sabor Maringá', tipo: 'Restaurante', cidade: 'Maringá', endereco: 'Av. Brasil, 4500', lat: -23.42, lng: -51.933 },
   { nome: 'Pastelaria Calçadão', tipo: 'Pastelaria', cidade: 'Maringá', endereco: 'Av. Colombo, 1850', lat: -23.4075, lng: -51.9395 },
   { nome: 'Lanchonete Ponto da Serra', tipo: 'Lanchonete', cidade: 'Campo Mourão', endereco: 'Av. Capitão Índio Bandeira, 780', lat: -24.046, lng: -52.383 },
