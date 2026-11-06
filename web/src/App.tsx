@@ -7,6 +7,7 @@ import { formatarDataOperacao } from './formato.ts';
 import { useMonitoramento } from './monitoramento.tsx';
 import { Alertas } from './paginas/Alertas.tsx';
 import { Clientes } from './paginas/Clientes.tsx';
+import { Coletas } from './paginas/Coletas.tsx';
 import { Contratos } from './paginas/Contratos.tsx';
 import { Mapa } from './paginas/Mapa.tsx';
 
@@ -69,8 +70,7 @@ export function App() {
           <Route path="/alertas" element={<Alertas />} />
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/contratos" element={<Contratos />} />
-          {/* Provisório: a Task 9 troca isto pela página de Coletas do dia. */}
-          <Route path="/coletas" element={<div className="pagina">Coletas do dia em construção.</div>} />
+          <Route path="/coletas" element={<Coletas />} />
           <Route path="*" element={<Mapa />} />
         </Routes>
       </main>

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, ZoomControl } from 'react-leaflet';
 import { useSearchParams } from 'react-router-dom';
 import { api, type Bombona, type Ponto, type Status } from '../api.ts';
-import { destaqueDe, iconeBombona, iconePatio } from '../componentes/icones.ts';
+import { destaqueDe, iconeBombona, iconeFurgao, iconePatio } from '../componentes/icones.ts';
 import { MarcadorAnimado } from '../componentes/MarcadorAnimado.tsx';
 import { Bateria, SeloAlerta, SeloStatus } from '../componentes/Selos.tsx';
 import { distancia, rotuloStatus } from '../formato.ts';
@@ -32,7 +32,7 @@ function prioridade(b: Bombona) {
 const referenciaDe = (b: Bombona) => b.localEsperado ?? b.destino;
 
 export function Mapa() {
-  const { bombonas, clientes, config, carregado, agora } = useMonitoramento();
+  const { bombonas, clientes, config, carregado, agora, roteiros } = useMonitoramento();
   const [params, setParams] = useSearchParams();
   const selecionada = params.get('b');
   const clienteFocado = Number(params.get('c')) || null;
@@ -182,6 +182,16 @@ export function Mapa() {
               >
                 <Tooltip direction="top" offset={[0, -14]}>
                   <strong>{b.codigo}</strong> · {rotuloStatus[b.status]}
+                </Tooltip>
+              </MarcadorAnimado>
+            ))}
+
+          {roteiros
+            .filter((r) => r.status === 'EM_ANDAMENTO' && r.posicao)
+            .map((r) => (
+              <MarcadorAnimado key={`furgao-${r.id}`} posicao={r.posicao!} icone={iconeFurgao(r.numero)} zIndexOffset={800}>
+                <Tooltip direction="top" offset={[0, -16]}>
+                  <strong>Furgão {r.numero}</strong> · {r.carga}/{r.capacidade} bombonas
                 </Tooltip>
               </MarcadorAnimado>
             ))}
