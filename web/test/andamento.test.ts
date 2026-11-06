@@ -19,4 +19,11 @@ test('rotas: um concluído e um parado no começo = 50%', () =>
   perto(andamentoDoDia(op({ fase: 'ROTAS', faseDuracaoMs: null }), [rot('CONCLUIDO'), rot('PLANEJADO')], 0), 0.5));
 test('rotas sem roteiros = 90%', () => perto(andamentoDoDia(op({ fase: 'ROTAS', faseDuracaoMs: null }), [], 0), 0.9));
 test('fim passado do prazo = 100%, sem passar de 1', () => assert.equal(andamentoDoDia(op({ fase: 'FIM', faseDesde: iso(0), faseDuracaoMs: 5_000 }), [], 9_000), 1));
-test('posição no meio do trajeto = 0,5', () => perto(fracaoDoTrajeto([[0, 0], [0, 1], [0, 2]], { lat: 0, lng: 1 }), 0.5));
+test('posição no meio do trajeto = 0,5', () => perto(fracaoDoTrajeto([[0, 0], [0, 1], [0, 2]], { lat: 0, lng: 1 }).fracao, 0.5));
+test('ida e volta: a partir do índice 2 acha o ponto da volta (0,75), não o da ida (0,25)', () => {
+  const trajeto: [number, number][] = [[0, 0], [0, 1], [0, 2], [0, 1], [0, 0]];
+  perto(fracaoDoTrajeto(trajeto, { lat: 0, lng: 1 }).fracao, 0.25);
+  const volta = fracaoDoTrajeto(trajeto, { lat: 0, lng: 1 }, 2);
+  perto(volta.fracao, 0.75);
+  assert.equal(volta.indice, 3);
+});

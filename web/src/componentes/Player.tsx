@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.ts';
-import { andamentoDoDia } from '../andamento.ts';
+import { andamentoDoDia, type IndicesDosRoteiros } from '../andamento.ts';
 import { formatarDataOperacao } from '../formato.ts';
 import { useMonitoramento } from '../monitoramento.tsx';
 
@@ -13,7 +13,7 @@ export function Player() {
   const [andamento, setAndamento] = useState(0);
 
   // O andamento só avança dentro do dia: leituras atrasadas dos furgões não fazem a barra recuar.
-  const maximo = useRef({ chave: '', valor: 0 });
+  const maximo = useRef<{ chave: string; valor: number; indices: IndicesDosRoteiros }>({ chave: '', valor: 0, indices: new Map() });
   const ultimo = useRef({ operacao, roteiros });
   ultimo.current = { operacao, roteiros };
 
@@ -21,11 +21,11 @@ export function Player() {
     const { operacao: op, roteiros: rs } = ultimo.current;
     if (!op) return;
     const chave = `${op.rodada}|${op.data}`;
-    if (maximo.current.chave !== chave) maximo.current = { chave, valor: 0 };
+    if (maximo.current.chave !== chave) maximo.current = { chave, valor: 0, indices: new Map() };
     // Pausado, o relógio da fase está parado e `faseDesde` fica defasado até o ▶: não dá para contar o tempo
     // desde ele. Congela no que a barra já mostrava (ou no começo da fase, se a página abriu com a simulação parada).
     const agora = op.pausado ? Date.parse(op.faseDesde) : Date.now();
-    maximo.current.valor = Math.max(maximo.current.valor, andamentoDoDia(op, rs, agora));
+    maximo.current.valor = Math.max(maximo.current.valor, andamentoDoDia(op, rs, agora, maximo.current.indices));
     setAndamento(maximo.current.valor);
   }).current;
 
@@ -40,7 +40,7 @@ export function Player() {
     return () => window.clearInterval(relogio);
   }, [rodando, atualizar]);
 
-  if (!operacao) return null;
+  if (!operacao) return <div className="player" />;
 
   const executar = async (acao: () => Promise<unknown>) => {
     setOcupado(true);
@@ -74,7 +74,10 @@ export function Player() {
           >
             Voltar ao começo
           </button>
-          <button type="button" className="botao botao--pequeno" disabled={ocupado} onClick={() => setConfirmando(false)}>
+          <button type="button" className="botao botao--pequeno" disabled={ocupado} onClick={() => {
+              setConfirmando(false);
+              setErro(null);
+            }}>
             Cancelar
           </button>
         </span>

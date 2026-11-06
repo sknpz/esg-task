@@ -77,6 +77,8 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
   // Cópia para o ouvinte de eventos comparar o antes e o depois sem se reinscrever a cada mudança.
   const bombonasRef = useRef(bombonas);
   bombonasRef.current = bombonas;
+  // Depois do reset, até o recarregar terminar o que há em `bombonas` é da rodada anterior: sem base para comparar etapas.
+  const semBase = useRef(false);
 
   const mostrarAviso = useCallback((aviso: Aviso) => {
     setAvisos((atual) => [...atual.slice(-3), aviso]);
@@ -134,7 +136,7 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
     fonte.onerror = () => setConectado(false);
     fonte.addEventListener('bombona', (e) => {
       const bombona: Bombona = JSON.parse((e as MessageEvent).data);
-      const etapa = etapaConcluida(pendentes.current[bombona.codigo] ?? bombonasRef.current[bombona.codigo], bombona);
+      const etapa = semBase.current ? null : etapaConcluida(pendentes.current[bombona.codigo] ?? bombonasRef.current[bombona.codigo], bombona);
       if (etapa) mostrarAviso({ id: `etapa-${bombona.codigo}-${Date.now()}`, tom: 'ETAPA', bombona: bombona.codigo, ...etapa });
       pendentes.current[bombona.codigo] = bombona;
       aplicarPendentesAgrupado();
@@ -161,10 +163,16 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
     // O reset apaga coletas, alertas e roteiros sem emitir eventos deles: tudo recomeça do zero.
     fonte.addEventListener('reset', () => {
       pendentes.current = {};
+      semBase.current = true;
+      setBombonas({});
       setAvisos([]);
       setRoteiros([]);
       setAlertasAbertos([]);
-      recarregar().catch(() => {});
+      recarregar()
+        .catch(() => {})
+        .finally(() => {
+          semBase.current = false;
+        });
     });
     fonte.addEventListener('roteiro', (e) => {
       const roteiro: Roteiro = JSON.parse((e as MessageEvent).data);

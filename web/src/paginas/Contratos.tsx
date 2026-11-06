@@ -51,7 +51,12 @@ export function Contratos() {
   const [enviando, setEnviando] = useState(false);
 
   const carregar = useCallback(() => api.contratos().then(setContratos).catch((e: Error) => setErro(e.message)), []);
-  useEffect(() => void carregar(), [carregar]);
+  // Recarrega ao montar e quando a simulação volta ao começo (o formulário aberto aponta para um contrato apagado).
+  const rodada = operacao?.rodada;
+  useEffect(() => {
+    setEditando(null);
+    void carregar();
+  }, [carregar, rodada]);
 
   const ativos = contratos.filter((c) => c.situacao === 'ATIVO');
   const encerrados = contratos.filter((c) => c.situacao === 'ENCERRADO');

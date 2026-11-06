@@ -8,7 +8,8 @@ import { useMonitoramento } from '../monitoramento.tsx';
 type Aba = 'ABERTO' | 'RESOLVIDO';
 
 export function Alertas() {
-  const { alertasAbertos, agora } = useMonitoramento();
+  const { alertasAbertos, agora, operacao } = useMonitoramento();
+  const rodada = operacao?.rodada;
   const [aba, setAba] = useState<Aba>('ABERTO');
   const [resolvidos, setResolvidos] = useState<Alerta[] | null>(null);
 
@@ -16,7 +17,7 @@ export function Alertas() {
   const idsAbertos = alertasAbertos.map((a) => a.id).join();
   useEffect(() => {
     if (aba === 'RESOLVIDO') api.alertas('RESOLVIDO').then(setResolvidos).catch(() => {});
-  }, [aba, idsAbertos]);
+  }, [aba, idsAbertos, rodada]);
 
   const linhas = aba === 'ABERTO' ? alertasAbertos : (resolvidos ?? []);
 

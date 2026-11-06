@@ -40,6 +40,9 @@ export function Coletas() {
   const { roteiros, operacao, bombonas, carregado } = useMonitoramento();
   const [naoAtendidas, setNaoAtendidas] = useState<Parada[]>([]);
   const [selecionado, setSelecionado] = useState<number | null>(null);
+  const rodada = operacao?.rodada;
+  // Os ids dos roteiros recomeçam no reset: a seleção antiga apontaria para outro furgão.
+  useEffect(() => setSelecionado(null), [rodada]);
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -157,7 +160,7 @@ export function Coletas() {
       </aside>
 
       <div className="coletas__mapa">
-        <MapaRoteiros roteiros={roteiros} selecionado={selecionado} />
+        <MapaRoteiros key={rodada} roteiros={roteiros} selecionado={selecionado} />
       </div>
     </div>
   );
