@@ -2,11 +2,43 @@ import { Router, type RequestHandler } from 'express';
 import type { Config } from '../config.ts';
 import { bombonasProcuradas, destino, linhaBombonaPorCodigo, localEsperado, type LinhaBombona } from '../consultas.ts';
 import type { Contexto } from '../contexto.ts';
-import { dataOperacao } from '../contratos.ts';
-import { agoraIso, transacao } from '../db.ts';
+import { caiNaData, proximoDiaOperacao } from '../calendario.ts';
+import { dataOperacao, regraDoContrato } from '../contratos.ts';
+import { agoraIso, transacao, type Banco } from '../db.ts';
 import { litrosEsperados } from '../rendimento.ts';
 
-export const CENARIOS = ['VENDA', 'DEVOLUCAO', 'SEM_SINAL', 'BATERIA_FRACA'] as const;
+export const CENARIOS = ['VENDA', 'DEVOLUCAO', 'SEM_SINAL', 'BATERIA_FRACA', 'VENDA_SILENCIOSA'] as const;
+
+/**
+ * Bombona para a venda com rastreador arrancado quando o painel não escolhe: uma em cliente, fora de furgão e que
+ * ainda não foi "vendida" assim desde que foi deixada lá. Prefere cliente com coleta no próximo dia de operação,
+ * para a parada que não a acha (RN22) vir logo. Sem nenhuma em cliente, null.
+ */
+function escolherParaVendaSilenciosa(db: Banco, hoje: string): { id: number; codigo: string } | null {
+  const candidatas = db
+    .prepare(
+      `SELECT b.id, b.codigo, b.cliente_id AS clienteId FROM bombonas b
+       WHERE b.status = 'EM_CLIENTE' AND b.roteiro_id IS NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM simulacao_comandos s
+           WHERE s.bombona_id = b.id AND s.tipo = 'VENDA_SILENCIOSA'
+             AND s.criado_em >= COALESCE((SELECT MAX(e.criado_em) FROM movimentacoes e
+                                          WHERE e.bombona_id = b.id AND e.tipo = 'ENTREGA_CONCLUIDA'), ''))
+       ORDER BY b.codigo`,
+    )
+    .all() as Array<{ id: number; codigo: string; clienteId: number }>;
+  const proximo = proximoDiaOperacao(hoje);
+  const contratos = db
+    .prepare(
+      `SELECT cliente_id AS clienteId, frequencia, dias_semana AS diasSemana, dia_mes AS diaMes, inicio
+       FROM contratos WHERE situacao = 'ATIVO'`,
+    )
+    .all() as Array<Parameters<typeof regraDoContrato>[0] & { clienteId: number }>;
+  const comColeta = new Set(contratos.filter((k) => caiNaData(regraDoContrato(k), proximo)).map((k) => k.clienteId));
+  const preferidas = candidatas.filter((b) => comColeta.has(b.clienteId));
+  const lista = preferidas.length ? preferidas : candidatas;
+  return lista[Math.floor(Math.random() * lista.length)] ?? null;
+}
 
 /** Só o simulador (que finge ser o hardware e os furgões) passa: `Authorization: Bearer <tokenSimulador>`, senão 401. */
 export function exigirTokenSimulador(config: Config): RequestHandler {
@@ -27,7 +59,11 @@ export function rotasDeSimulacao(ctx: Contexto) {
   r.post('/simulacao/comandos', (req, res) => {
     const tipo = req.body?.tipo;
     if (!CENARIOS.includes(tipo)) return void res.status(400).json({ erro: `tipo deve ser um de: ${CENARIOS.join(', ')}` });
-    const b = linhaBombonaPorCodigo(db, String(req.body?.bombona ?? ''));
+    const pedida = req.body?.bombona;
+    // Venda com rastreador arrancado: a bombona é opcional, o servidor escolhe uma boa para a demonstração.
+    const escolher = tipo === 'VENDA_SILENCIOSA' && (pedida === undefined || pedida === null || pedida === '');
+    const b = escolher ? escolherParaVendaSilenciosa(db, dataOperacao(ctx)) : linhaBombonaPorCodigo(db, String(pedida ?? ''));
+    if (!b && escolher) return void res.status(409).json({ erro: 'Nenhuma bombona em cliente para vender' });
     if (!b) return void res.status(404).json({ erro: 'Bombona não encontrada' });
     const { lastInsertRowid } = db
       .prepare('INSERT INTO simulacao_comandos (bombona_id, tipo, criado_em) VALUES (?, ?, ?)')
