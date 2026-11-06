@@ -20,8 +20,8 @@ try {
   console.error('Falha ao concluir os roteiros interrompidos:', erro);
 }
 
-// RN10: varredura de dispositivos sem sinal.
-const intervaloVarredura = Math.max(1000, Math.min(config.semSinalSegundos * 1000, 60_000) / 3);
+// RN10: varredura de dispositivos sem sinal. Calculada sobre metade do prazo, para o 2x não atrasar a detecção.
+const intervaloVarredura = Math.max(1000, Math.min((config.semSinalSegundos / 2) * 1000, 60_000) / 3);
 setInterval(() => verificarSemSinal(ctx), intervaloVarredura).unref();
 
 // Relógio da operação simulada (manhã → rotas → fim do dia).

@@ -154,7 +154,12 @@ export function processarLeitura(ctx: Contexto, dispositivoId: string, leitura: 
 /** RN10: abre SEM_SINAL para dispositivos calados há mais tempo que o limite. */
 export function verificarSemSinal(ctx: Contexto, agora = Date.now()) {
   const { db, config } = ctx;
-  const limite = new Date(agora - config.semSinalSegundos * 1000).toISOString();
+  // Sem operação criada, vale o relógio real (1x, não pausado). Pausada, o tempo não passa; em 2x o prazo encurta.
+  const operacao = db.prepare('SELECT pausado, velocidade FROM operacao WHERE id = 1').get() as
+    | { pausado: number; velocidade: number }
+    | undefined;
+  if (operacao?.pausado === 1) return [];
+  const limite = new Date(agora - (config.semSinalSegundos * 1000) / (operacao?.velocidade ?? 1)).toISOString();
   const caladas = db
     .prepare(
       `SELECT b.id, b.cliente_id, d.ultimo_sinal

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import type { Contexto } from '../src/contexto.ts';
 import type { Evento } from '../src/eventos.ts';
+import { continuar, definirVelocidade, estadoOperacao, pausar } from '../src/operacao.ts';
 import { verificarSemSinal } from '../src/regras.ts';
 import { criarContexto, subirApi } from './apoio.ts';
 
@@ -196,5 +197,37 @@ describe('GET /api/eventos', () => {
     const { value } = await leitor.read();
     assert.match(new TextDecoder().decode(value), /^event: bombona\ndata: \{.*"codigo":"BO-0005"/);
     controle.abort();
+  });
+});
+
+describe('sem sinal e o player da simulação', () => {
+  it('pausado, a varredura não abre SEM_SINAL', () => {
+    const ctx = criarContexto({ semSinalSegundos: 45 });
+    estadoOperacao(ctx); // nasce pausado
+    ctx.db.prepare('UPDATE dispositivos SET ultimo_sinal = ?').run(new Date(Date.now() - 3_600_000).toISOString());
+    assert.equal(verificarSemSinal(ctx).length, 0);
+  });
+
+  it('em 2x o prazo de sem sinal cai pela metade', () => {
+    const ctx = criarContexto({ semSinalSegundos: 45 });
+    const agora = Date.now();
+    continuar(ctx, agora);
+    definirVelocidade(ctx, 2, agora);
+    ctx.db.prepare('UPDATE dispositivos SET ultimo_sinal = ?').run(new Date(agora).toISOString());
+    // um dispositivo calado há 30 s: fora do prazo em 2x (22,5 s), dentro em 1x
+    ctx.db
+      .prepare('UPDATE dispositivos SET ultimo_sinal = ? WHERE id = (SELECT MIN(id) FROM dispositivos)')
+      .run(new Date(agora - 30_000).toISOString());
+    assert.equal(verificarSemSinal(ctx, agora).length, 1);
+  });
+
+  it('continuar desloca o último sinal pelo tempo pausado', () => {
+    const ctx = criarContexto();
+    continuar(ctx, 1_000_000);
+    pausar(ctx, 2_000_000);
+    ctx.db.prepare('UPDATE dispositivos SET ultimo_sinal = ?').run(new Date(1_990_000).toISOString());
+    continuar(ctx, 2_060_000); // 60 s pausado
+    const { ultimo_sinal } = ctx.db.prepare('SELECT ultimo_sinal FROM dispositivos LIMIT 1').get() as { ultimo_sinal: string };
+    assert.equal(Date.parse(ultimo_sinal), 2_050_000);
   });
 });

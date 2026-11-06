@@ -414,9 +414,16 @@ export function continuar(ctx: Contexto, agora = Date.now()): EstadoOperacao {
   const inicio = inicioDaPausa.get(ctx.db);
   inicioDaPausa.delete(ctx.db);
   const desde = inicio === undefined ? agora : Date.parse(linha.fase_desde) + (agora - inicio);
-  transacao(ctx.db, () =>
-    ctx.db.prepare('UPDATE operacao SET pausado = 0, fase_desde = ? WHERE id = 1').run(new Date(desde).toISOString()),
-  );
+  transacao(ctx.db, () => {
+    ctx.db.prepare('UPDATE operacao SET pausado = 0, fase_desde = ? WHERE id = 1').run(new Date(desde).toISOString());
+    // O tempo pausado não conta como silêncio: desloca o último sinal de todos os rastreadores.
+    if (inicio !== undefined) {
+      const pausadoMs = agora - inicio;
+      const dispositivos = ctx.db.prepare('SELECT id, ultimo_sinal FROM dispositivos').all() as Array<{ id: number; ultimo_sinal: string }>;
+      const atualizar = ctx.db.prepare('UPDATE dispositivos SET ultimo_sinal = ? WHERE id = ?');
+      for (const d of dispositivos) atualizar.run(new Date(Date.parse(d.ultimo_sinal) + pausadoMs).toISOString(), d.id);
+    }
+  });
   const estado = estadoOperacao(ctx);
   ctx.eventos.emitir({ tipo: 'operacao', dados: estado });
   return estado;
