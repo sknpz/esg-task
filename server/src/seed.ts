@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import type { Config } from './config.ts';
 import { transacao, type Banco } from './db.ts';
 
-// Dados 100% fictícios: nomes inventados, coordenadas aproximadas de Cianorte e cidades vizinhas.
+// Clientes 100% fictícios: nomes inventados, coordenadas aproximadas de Cianorte e cidades vizinhas. O pátio é o local real da empresa (config.ts).
 const CLIENTES = [
   { nome: 'Restaurante Sabor da Terra', tipo: 'Restaurante', cidade: 'Cianorte', endereco: 'Av. Santa Catarina, 1200', lat: -23.6587, lng: -52.6071 },
   { nome: 'Pastelaria do Japonês', tipo: 'Pastelaria', cidade: 'Cianorte', endereco: 'Rua Pará, 455', lat: -23.6631, lng: -52.6012 },

@@ -27,9 +27,9 @@ export function carregarConfig(): Config {
     caminhoBanco: process.env.DB_PATH ?? path.join(import.meta.dirname, '..', 'data', 'bombonas.db'),
     patio: {
       nome: 'Pátio Bio Óleo',
-      endereco: 'Parque Industrial, Cianorte-PR (endereço fictício)',
-      lat: -23.642,
-      lng: -52.583,
+      endereco: 'Rod. Bento Fernandes Dias, Cianorte-PR (plus code 78MR+R9)',
+      lat: -23.71544,
+      lng: -52.65906,
       raioM: num('PATIO_RAIO_M', 250),
     },
     extravioMetros: num('EXTRAVIO_METROS', 2000),

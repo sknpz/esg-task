@@ -118,6 +118,11 @@ describe('API de consulta', () => {
     assert.ok(clientes.some((c) => distanciaM(ctx.config.patio, c) >= 100_000));
   });
 
+  it('o pátio fica no local real da Bio Óleo', () => {
+    assert.equal(ctx.config.patio.lat, -23.71544);
+    assert.equal(ctx.config.patio.lng, -52.65906);
+  });
+
   it('cada cliente tem de 3 a 6 coletas com litros dentro da capacidade', () => {
     const clientes = ctx.db.prepare('SELECT id FROM clientes').all() as any[];
     const q = ctx.db.prepare(
