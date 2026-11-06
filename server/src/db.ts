@@ -76,8 +76,11 @@ CREATE TABLE IF NOT EXISTS alertas (
   -- RN14/RN15: reaberto na mesma saída da cerca depois de uma resolução manual; não conta como novo incidente.
   reaberto      INTEGER NOT NULL DEFAULT 0
 );
--- RN12: no máximo um alerta aberto por tipo e por bombona.
-CREATE UNIQUE INDEX IF NOT EXISTS alertas_um_aberto ON alertas (bombona_id, tipo) WHERE status = 'ABERTO';
+-- RN12: no máximo um alerta aberto por tipo e por bombona (exceto COLETA_ABAIXO, que é do cliente).
+DROP INDEX IF EXISTS alertas_um_aberto;
+CREATE UNIQUE INDEX alertas_um_aberto ON alertas (bombona_id, tipo) WHERE status = 'ABERTO' AND tipo <> 'COLETA_ABAIXO';
+-- RN18: no máximo um aviso de coleta abaixo do esperado aberto por cliente.
+CREATE UNIQUE INDEX IF NOT EXISTS alertas_coleta_abaixo_cliente ON alertas (cliente_id) WHERE status = 'ABERTO' AND tipo = 'COLETA_ABAIXO';
 
 -- Canal de controle da demonstração: o painel pede um cenário e o simulador executa.
 CREATE TABLE IF NOT EXISTS simulacao_comandos (
@@ -108,7 +111,8 @@ export function abrirBanco(caminho: string): Banco {
   const db = new DatabaseSync(caminho);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   db.exec(ESQUEMA);
-  db.exec(`PRAGMA user_version = ${VERSAO_ESQUEMA}`);
+  const versao = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+  if (versao < VERSAO_ESQUEMA) db.exec(`PRAGMA user_version = ${VERSAO_ESQUEMA}`);
   return db;
 }
 

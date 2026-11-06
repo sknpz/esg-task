@@ -64,7 +64,7 @@ emprestada, levada por outra empresa de coleta ou simplesmente descartada.
 - **RN11 – Bateria baixa.** Uma leitura com bateria abaixo de **20%** abre o alerta `BATERIA_BAIXA`. Ele se
   resolve sozinho quando a bateria passa de 30%, depois da troca ou recarga. O rastreador é recarregado sempre
   que a bombona volta ao pátio.
-- **RN12 – Um alerta aberto por tipo.** Uma bombona não pode ter dois alertas abertos do mesmo tipo.
+- **RN12 – Um alerta aberto por tipo.** Uma bombona não pode ter dois alertas abertos do mesmo tipo (exceto `COLETA_ABAIXO`, que é por cliente: RN18).
 - **RN13 – Bombona em rota não gera alerta de cerca.** Durante o transporte não existe local esperado.
 - **RN14 – Risco do cliente.** O cliente acumula um histórico de incidentes, que é a quantidade de alertas
   `FORA_DA_AREA` ligados a ele. Cada saída da cerca conta uma vez, mesmo que depois vire extravio.
@@ -83,8 +83,10 @@ emprestada, levada por outra empresa de coleta ou simplesmente descartada.
   coletas normais anteriores do cliente; com menos coletas, a regra não roda. Se `litros` ficar abaixo de
   esperado × `COLETA_MINIMO_PCT` (50) %, abre o alerta `COLETA_ABAIXO` (severidade `AVISO`), por exemplo
   "Coleta de 20 L, esperado ~50 L". É só um aviso: não conta no risco do cliente (RN14), não muda o status da
-  bombona e só se resolve manualmente (RN15). Um mês fraco não é fraude. Pela RN12, uma nova coleta baixa
-  substitui o aviso aberto (resolvido pelo sistema).
+  bombona e só se resolve manualmente (RN15). Um mês fraco não é fraude. O aviso é do cliente, não da bombona:
+  há no máximo um aberto por cliente, e uma nova coleta baixa no mesmo cliente (de qualquer bombona) substitui o
+  aviso aberto (resolvido pelo sistema). Ele aparece na tela Alertas, mas não conta como alerta da bombona nem
+  aparece como alerta no mapa.
 
 ## Parâmetros
 

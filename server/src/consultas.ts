@@ -31,7 +31,7 @@ const SELECT_BOMBONA = `
   SELECT b.*, d.bateria, d.ultimo_sinal, d.lat, d.lng,
          c.nome AS cliente_nome, c.cidade AS cliente_cidade,
          c.lat AS cliente_lat, c.lng AS cliente_lng, c.raio_m AS cliente_raio,
-         (SELECT GROUP_CONCAT(a.tipo) FROM alertas a WHERE a.bombona_id = b.id AND a.status = 'ABERTO') AS alertas_abertos
+         (SELECT GROUP_CONCAT(a.tipo) FROM alertas a WHERE a.bombona_id = b.id AND a.status = 'ABERTO' AND a.tipo <> 'COLETA_ABAIXO') AS alertas_abertos
   FROM bombonas b
   JOIN dispositivos d ON d.id = b.dispositivo_id
   LEFT JOIN clientes c ON c.id = b.cliente_id`;

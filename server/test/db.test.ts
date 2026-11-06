@@ -33,3 +33,14 @@ it('não apaga um banco que já está na versão atual', () => {
   assert.equal((reaberto.prepare('SELECT COUNT(*) AS n FROM clientes').get() as any).n, 1);
   reaberto.close();
 });
+
+it('não rebaixa o user_version de um banco mais novo', () => {
+  const arquivo = arquivoTemp();
+  const db = abrirBanco(arquivo);
+  db.exec('PRAGMA user_version = 99');
+  db.close();
+
+  const reaberto = abrirBanco(arquivo);
+  assert.equal((reaberto.prepare('PRAGMA user_version').get() as any).user_version, 99);
+  reaberto.close();
+});

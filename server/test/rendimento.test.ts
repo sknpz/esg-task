@@ -30,7 +30,6 @@ const inserir = (clienteId: number, tipo: string, litros: number | null) => {
     .run(id, tipo, clienteId, litros, quando);
 };
 const historico = (clienteId: number, litros: number[]) => litros.forEach((l) => inserir(clienteId, 'COLETA', l));
-const recuperacao = (clienteId: number, _l: number) => inserir(clienteId, 'RECUPERACAO', null);
 
 const risco = async (clienteId: number) => (await get('/clientes')).find((c: any) => c.id === clienteId).risco;
 const incidentes = async (clienteId: number) => (await get('/clientes')).find((c: any) => c.id === clienteId).incidentes;
@@ -85,8 +84,9 @@ describe('coleta abaixo do esperado (RN18)', () => {
     historico(11, [50, 50, 50]); // BO-0014
     await post('/bombonas/BO-0014/coleta', { litros: 10 });
     const primeiro = alertaAberto('BO-0014', 'COLETA_ABAIXO');
-    const { id, clienteId } = bombonaDoCliente('BO-0014');
-    ctx.db.prepare("UPDATE bombonas SET status = 'EM_CLIENTE', cliente_id = ? WHERE id = ?").run(clienteId ?? 11, id);
+    const { id } = bombonaDoCliente('BO-0014');
+    // A primeira coleta devolveu a bombona ao pátio; recoloca no mesmo cliente (11) para a segunda coleta.
+    ctx.db.prepare("UPDATE bombonas SET status = 'EM_CLIENTE', cliente_id = ? WHERE id = ?").run(11, id);
     await post('/bombonas/BO-0014/coleta', { litros: 5 });
     const segundo = alertaAberto('BO-0014', 'COLETA_ABAIXO');
     assert.notEqual(segundo.id, primeiro.id);
@@ -94,6 +94,47 @@ describe('coleta abaixo do esperado (RN18)', () => {
     assert.equal(antigo.status, 'RESOLVIDO');
     assert.equal(antigo.resolvido_por, 'SISTEMA');
     assert.equal(antigo.resolucao, 'Substituído por uma coleta mais recente');
+  });
+
+  const colocar = (codigo: string, clienteId: number) =>
+    ctx.db.prepare("UPDATE bombonas SET status = 'EM_CLIENTE', cliente_id = ? WHERE codigo = ?").run(clienteId, codigo);
+  const abertosDoCliente = (clienteId: number) =>
+    ctx.db.prepare("SELECT * FROM alertas WHERE cliente_id = ? AND tipo = 'COLETA_ABAIXO' AND status = 'ABERTO'").all(clienteId) as any[];
+
+  it('coleta baixa da mesma bombona em outro cliente não resolve o aviso do primeiro cliente', async () => {
+    historico(12, [50, 50, 50]);
+    historico(13, [50, 50, 50]);
+    colocar('BO-0017', 12);
+    await post('/bombonas/BO-0017/coleta', { litros: 10 });
+    colocar('BO-0017', 13);
+    await post('/bombonas/BO-0017/coleta', { litros: 5 });
+    assert.equal(abertosDoCliente(12).length, 1);
+    assert.equal(abertosDoCliente(13).length, 1);
+  });
+
+  it('segunda coleta baixa no mesmo cliente com outra bombona resolve o aviso anterior (SISTEMA)', async () => {
+    historico(14, [50, 50, 50]);
+    colocar('BO-0018', 14);
+    colocar('BO-0019', 14);
+    await post('/bombonas/BO-0018/coleta', { litros: 10 });
+    const primeiro = abertosDoCliente(14)[0];
+    await post('/bombonas/BO-0019/coleta', { litros: 5 });
+    const abertos = abertosDoCliente(14);
+    assert.equal(abertos.length, 1);
+    assert.notEqual(abertos[0].id, primeiro.id);
+    const antigo = ctx.db.prepare('SELECT * FROM alertas WHERE id = ?').get(primeiro.id) as any;
+    assert.equal(antigo.status, 'RESOLVIDO');
+    assert.equal(antigo.resolvido_por, 'SISTEMA');
+    assert.equal(antigo.resolucao, 'Substituído por uma coleta mais recente');
+  });
+
+  it('o aviso não conta como alerta da bombona, mas aparece na lista de alertas', async () => {
+    historico(15, [50, 50, 50]);
+    colocar('BO-0020', 15);
+    await post('/bombonas/BO-0020/coleta', { litros: 1 });
+    assert.deepEqual((await get('/bombonas/BO-0020')).alertasAbertos, []);
+    const lista = await get('/alertas?status=ABERTO');
+    assert.ok(lista.some((a: any) => a.bombona === 'BO-0020' && a.tipo === 'COLETA_ABAIXO'));
   });
 
   it('aceita coleta igual à capacidade e coleta de 0 L (limites da validação)', async () => {

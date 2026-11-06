@@ -1,4 +1,4 @@
-import { abrirAlerta, resolverAlertasDaBombona } from './alertas.ts';
+import { abrirAlerta, resolverAvisoDeColetaDoCliente } from './alertas.ts';
 import type { alertaPorId } from './consultas.ts';
 import type { Config } from './config.ts';
 import type { Banco } from './db.ts';
@@ -25,7 +25,7 @@ export function avaliarColeta(
   c: { bombonaId: number; clienteId: number; litros: number; esperado: number | null; em: string },
 ): Alerta[] {
   if (c.esperado === null || c.litros >= (c.esperado * config.coletaMinimoPct) / 100) return [];
-  const tocados: Alerta[] = resolverAlertasDaBombona(db, c.bombonaId, ['COLETA_ABAIXO'], {
+  const tocados: Alerta[] = resolverAvisoDeColetaDoCliente(db, c.clienteId, {
     por: 'SISTEMA',
     texto: 'Substituído por uma coleta mais recente',
     em: c.em,

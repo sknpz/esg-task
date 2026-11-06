@@ -44,6 +44,22 @@ export function resolverAlertasDaBombona(
   return ids.map(({ id }) => alertaPorId(db, id));
 }
 
+/** RN18: resolve o aviso de coleta abaixo do esperado aberto do cliente (de qualquer bombona). Devolve os resolvidos. */
+export function resolverAvisoDeColetaDoCliente(
+  db: Banco,
+  clienteId: number,
+  resolucao: { por: 'SISTEMA' | 'OPERADOR'; texto: string; em: string },
+) {
+  const ids = db
+    .prepare(
+      `UPDATE alertas SET status = 'RESOLVIDO', resolvido_em = ?, resolvido_por = ?, resolucao = ?
+       WHERE cliente_id = ? AND status = 'ABERTO' AND tipo = 'COLETA_ABAIXO'
+       RETURNING id`,
+    )
+    .all(resolucao.em, resolucao.por, resolucao.texto, clienteId) as Array<{ id: number }>;
+  return ids.map(({ id }) => alertaPorId(db, id));
+}
+
 export function temAlertaAberto(db: Banco, bombonaId: number, tipo: TipoAlerta) {
   return Boolean(db.prepare("SELECT 1 FROM alertas WHERE bombona_id = ? AND tipo = ? AND status = 'ABERTO'").get(bombonaId, tipo));
 }
