@@ -23,9 +23,11 @@ reiniciar no meio de um roteiro, o furgão recomeça da última parada feita.
 | Cenário **VENDA**           | Alguém leva a bombona pelas ruas, de 4 a 9 km, numa direção aleatória, e para numa rua |
 | Cenário **VENDA COM RASTREADOR ARRANCADO** | A bombona some e o rastreador nunca mais manda leitura; o furgão não a encontra na próxima parada do cliente |
 | Virada do dia simulado      | Com chance `SIM_VENDAS_POR_DIA`, uma bombona parada em cliente é "vendida" (cenário VENDA) |
-| Operação pausada            | Ninguém se move (furgões, vendas, devoluções) e não há sorteio; os parados continuam mandando sinal |
+| Operação pausada            | Ninguém se move (furgões, vendas, devoluções), não há sorteio nem gasto de bateria, e o silêncio do cenário SEM SINAL fica congelado; os parados continuam mandando sinal |
+| Velocidade **2x**           | Cada ciclo faz o dobro (passos do furgão, da bombona e gasto de bateria); o tick continua em 250 ms |
+| Reset / nova rodada         | O servidor muda o `X-Rodada` (mandado em toda escrita); o simulador descarta todo o estado e recomeça com os tokens novos |
 | Cenário **DEVOLUÇÃO**       | A bombona volta pelas ruas para o local esperado              |
-| Cenário **SEM SINAL**       | O rastreador fica calado até passar o limite de sem sinal     |
+| Cenário **SEM SINAL**       | O rastreador fica calado até passar o limite de sem sinal (contado em tempo simulado: 2x corre dobrado, pausa congela) |
 | Cenário **BATERIA FRACA**   | A bateria cai para 14%                                        |
 | Coleta registrada no painel | Quem estava com a bombona "perde" ela e o furgão a leva ao pátio |
 | Chegada ao pátio            | O rastreador é recarregado (bateria em 100%) e manda uma leitura na hora |

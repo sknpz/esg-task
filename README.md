@@ -83,8 +83,8 @@ Isso sobe três processos:
 > `npm install` da raiz falha, porque os workspaces dependem deles. E o banco SQLite fica tão lento ali que os
 > furgões andam aos pulos.
 
-O banco (`server/data/bombonas.db`) é criado e populado na primeira execução. Para começar do zero, apague o
-arquivo.
+O banco (`server/data/bombonas.db`) é criado e populado na primeira execução. Para começar do zero, use o botão **⟲** do
+player (apagar o arquivo com o simulador rodando reinicia a rodada em 1 e o simulador continua com os tokens antigos).
 
 Para rodar como em produção, com a API servindo o painel já compilado:
 
@@ -139,7 +139,7 @@ As variáveis de ambiente (tempo de sem sinal, distância de extravio etc.) est�
    ela sai da cerca, abre o alerta **Fora da área**, a trilha é desenhada e, passando de 2 km, vira
    **Extraviada** (e o cliente ganha um incidente no ranking de risco).
 5. **Venda com rastreador arrancado.** Na aba **Coletas do dia**, clique em **Venda com rastreador arrancado**: a bombona some sem sair da
-   cerca e o rastreador fica mudo, então nenhum alerta de cerca abre (só o de sem sinal, depois de 45 s). O
+   cerca e o rastreador fica mudo, então nenhum alerta de cerca abre (só o de sem sinal, depois de 45 s, ou 22,5 s em 2x). O
    servidor prefere uma bombona de um cliente com coleta no próximo dia. Quando o furgão chegar nesse cliente, a parada **não acha
    a bombona**, abre o extravio e o **risco do cliente sobe**: foi o único jeito de descobrir. Na venda comum do
    passo 4 a parada só confirma, porque o rastreador já tinha visto, e o incidente não conta duas vezes.
@@ -147,7 +147,7 @@ As variáveis de ambiente (tempo de sem sinal, distância de extravio etc.) est�
    extraviada: o furgão a leva de volta ao pátio.
 7. Veja o aviso **Coleta abaixo do esperado** (RN18) na tela Alertas: de vez em quando uma troca traz bem menos
    litros que a média do cliente.
-8. Teste também **Cortar o sinal** (alerta de sem sinal depois de 45 s) e **Bateria fraca**.
+8. Teste também **Cortar o sinal** (alerta de sem sinal depois de 45 s; 22,5 s em 2x) e **Bateria fraca**.
 
 ## Próximos passos (fora do protótipo)
 

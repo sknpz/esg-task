@@ -76,8 +76,8 @@ emprestada, levada por outra empresa de coleta ou simplesmente descartada.
   `EXTRAVIADA` e é aberto um alerta `EXTRAVIO` crítico.
 - **RN09 – Retorno.** Se uma bombona fora da área voltar para dentro da cerca, os alertas `FORA_DA_AREA` e
   `EXTRAVIO` são resolvidos automaticamente e o status volta ao anterior.
-- **RN10 – Sem sinal.** Se um dispositivo não envia leitura há mais de **6 h** (na demonstração: 45 s), é
-  aberto o alerta `SEM_SINAL`. Esse alerta se resolve sozinho quando o sinal volta.
+- **RN10 – Sem sinal.** Se um dispositivo não envia leitura há mais de **6 h** (na demonstração: 45 s, ou 22,5 s em 2x), é
+  aberto o alerta `SEM_SINAL`. O prazo conta em tempo simulado: fica congelado enquanto a operação está pausada. Esse alerta se resolve sozinho quando o sinal volta.
 - **RN11 – Bateria baixa.** Uma leitura com bateria abaixo de **20%** abre o alerta `BATERIA_BAIXA`. Ele se
   resolve sozinho quando a bateria passa de 30%, depois da troca ou recarga. O rastreador é recarregado sempre
   que a bombona volta ao pátio.
@@ -112,7 +112,7 @@ emprestada, levada por outra empresa de coleta ou simplesmente descartada.
 - **RN20 – Coletas do dia.** O servidor é dono do relógio e cada dia simulado tem três fases: **manhã** (as
   coletas do dia são geradas dos contratos e divididas entre os furgões; depois de `FASE_PAUSA_S` os furgões
   saem), **rotas** (os furgões fazem as paradas) e **fim do dia** (só depois de todos os furgões voltarem, e
-  depois da mesma pausa, a data avança para o próximo dia de operação, pulando o domingo). O planejamento
+  depois da mesma pausa, a data avança para o próximo dia de operação, pulando o domingo). A operação **nasce pausada** (e volta a nascer assim a cada reset): só ▶ solta o relógio. Em **2x**, a pausa da manhã e a do fim do dia caem pela metade (o furgão também anda o dobro). O planejamento
   acontece uma vez por data: contrato criado ou editado vale a partir do próximo dia e não mexe numa rota que já
   saiu. Contrato encerrado gera **uma** parada de retirada (fora da frequência, sem deixar vazias), a menos que o
   cliente já tenha um novo contrato `ATIVO` (a próxima coleta dele troca tudo) ou não haja bombona dele para
