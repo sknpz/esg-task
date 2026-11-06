@@ -63,6 +63,8 @@ describe('coleta abaixo do esperado (RN18)', () => {
     await post('/bombonas/BO-0010/coleta', { litros: 20 });
     assert.equal(alertaAberto('BO-0010', 'COLETA_ABAIXO'), undefined);
 
+    // O seed já dá histórico a todos os clientes; apaga o do cliente 8 para ter só 2 coletas.
+    ctx.db.prepare("DELETE FROM movimentacoes WHERE cliente_id = 8 AND tipo = 'COLETA'").run();
     historico(8, [50, 50]); // BO-0011: só 2 coletas
     await post('/bombonas/BO-0011/coleta', { litros: 1 });
     assert.equal(alertaAberto('BO-0011', 'COLETA_ABAIXO'), undefined);

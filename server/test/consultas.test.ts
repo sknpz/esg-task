@@ -23,11 +23,11 @@ describe('API de consulta', () => {
   before(async () => (api = await subirApi(ctx)));
   after(() => api.fechar());
 
-  it('lista as 24 bombonas do seed com posição e local esperado', async () => {
+  it('lista as 35 bombonas do seed com posição e local esperado', async () => {
     const bombonas = await (await fetch(`${api.url}/bombonas`)).json();
-    assert.equal(bombonas.length, 24);
+    assert.equal(bombonas.length, 35);
     const emCliente = bombonas.filter((b: any) => b.status === 'EM_CLIENTE');
-    assert.equal(emCliente.length, 17);
+    assert.equal(emCliente.length, 28);
     for (const b of emCliente) {
       assert.ok(b.localEsperado, b.codigo);
       assert.ok(b.distanciaM < 150, `${b.codigo} está a ${b.distanciaM} m`);
@@ -110,10 +110,34 @@ describe('API de consulta', () => {
     assert.equal(clientes.find((c: any) => c.nome === 'Hotel Colonial').risco, 'BAIXO');
   });
 
+  it('espalha os clientes pelo raio de atendimento', () => {
+    const clientes = ctx.db.prepare('SELECT cidade, lat, lng FROM clientes').all() as any[];
+    assert.ok(clientes.length >= 25);
+    assert.ok(new Set(clientes.map((c) => c.cidade)).size >= 12);
+    for (const c of clientes) assert.ok(distanciaM(ctx.config.patio, c) <= 250_000);
+    assert.ok(clientes.some((c) => distanciaM(ctx.config.patio, c) >= 100_000));
+  });
+
+  it('cada cliente tem de 3 a 6 coletas com litros dentro da capacidade', () => {
+    const clientes = ctx.db.prepare('SELECT id FROM clientes').all() as any[];
+    const q = ctx.db.prepare(
+      `SELECT m.litros, b.capacidade_l FROM movimentacoes m JOIN bombonas b ON b.id = m.bombona_id
+       WHERE m.cliente_id = ? AND m.tipo = 'COLETA' AND m.litros IS NOT NULL`);
+    for (const c of clientes) {
+      const coletas = q.all(c.id) as any[];
+      assert.ok(coletas.length >= 3 && coletas.length <= 6, `cliente ${c.id}: ${coletas.length} coletas`);
+      const media = coletas.reduce((t, x) => t + x.litros, 0) / coletas.length;
+      for (const x of coletas) {
+        assert.ok(x.litros > 0 && x.litros <= x.capacidade_l, `cliente ${c.id}: ${x.litros} L`);
+        assert.ok(x.litros >= 0.5 * media, `cliente ${c.id}: ${x.litros} L abaixo de 50% da média`);
+      }
+    }
+  });
+
   it('resume os indicadores', async () => {
     const ind = await (await fetch(`${api.url}/indicadores`)).json();
-    assert.equal(ind.total, 24);
-    assert.deepEqual(ind.porStatus, { PATIO: 5, EM_ROTA: 2, EM_CLIENTE: 17, EXTRAVIADA: 0 });
+    assert.equal(ind.total, 35);
+    assert.deepEqual(ind.porStatus, { PATIO: 5, EM_ROTA: 2, EM_CLIENTE: 28, EXTRAVIADA: 0 });
     assert.equal(ind.alertasAbertos, 0);
   });
 });

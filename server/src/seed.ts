@@ -18,10 +18,24 @@ const CLIENTES = [
   { nome: 'Cozinha Industrial Bom Prato', tipo: 'Cozinha industrial', cidade: 'Jussara', endereco: 'Rua das Indústrias, 55', lat: -23.6214, lng: -52.4683, raioM: 200 },
   { nome: 'Pizzaria Forno a Lenha', tipo: 'Pizzaria', cidade: 'Indianópolis', endereco: 'Av. Rio de Janeiro, 230', lat: -23.4764, lng: -52.6986 },
   { nome: 'Lanchonete Trevo', tipo: 'Lanchonete', cidade: 'Tuneiras do Oeste', endereco: 'Rod. PR-323, trevo de acesso', lat: -23.8697, lng: -52.8761 },
+  // Escala real: pontos em ruas do centro de cada cidade (o roteador precisa alcançá-los).
+  { nome: 'Churrascaria Fogo de Chão Norte', tipo: 'Churrascaria', cidade: 'Umuarama', endereco: 'Av. Paraná, 2100', lat: -23.766, lng: -53.325 },
+  { nome: 'Restaurante Sabor Maringá', tipo: 'Restaurante', cidade: 'Maringá', endereco: 'Av. Brasil, 4500', lat: -23.42, lng: -51.933 },
+  { nome: 'Pastelaria Calçadão', tipo: 'Pastelaria', cidade: 'Maringá', endereco: 'Av. Colombo, 1850', lat: -23.4075, lng: -51.9395 },
+  { nome: 'Lanchonete Ponto da Serra', tipo: 'Lanchonete', cidade: 'Campo Mourão', endereco: 'Av. Capitão Índio Bandeira, 780', lat: -24.046, lng: -52.383 },
+  { nome: 'Hotel Rio Paranapanema', tipo: 'Hotel', cidade: 'Paranavaí', endereco: 'Av. Paraná, 1330', lat: -23.073, lng: -52.465 },
+  { nome: 'Pizzaria Massa Fina', tipo: 'Pizzaria', cidade: 'Cruzeiro do Oeste', endereco: 'Av. Brasil, 640', lat: -23.785, lng: -53.073 },
+  { nome: 'Padaria Trigal', tipo: 'Padaria', cidade: 'Goioerê', endereco: 'Av. Goioerê, 915', lat: -24.185, lng: -53.025 },
+  { nome: 'Restaurante Mesa Farta', tipo: 'Restaurante', cidade: 'Cidade Gaúcha', endereco: 'Av. Brasil, 310', lat: -23.378, lng: -52.944 },
+  { nome: 'Lanchonete Esquina do Sabor', tipo: 'Lanchonete', cidade: 'Rondon', endereco: 'Rua Pernambuco, 205', lat: -23.411, lng: -52.765 },
+  { nome: 'Cozinha Industrial Oeste', tipo: 'Cozinha industrial', cidade: 'Cascavel', endereco: 'Av. Brasil, 5200', lat: -24.9555, lng: -53.4552 },
+  { nome: 'Churrascaria Boi Gordo', tipo: 'Churrascaria', cidade: 'Cascavel', endereco: 'Rua Paraná, 1700', lat: -24.9508, lng: -53.4605 },
 ];
 
 // Índice (base 1) do cliente de cada bombona alocada.
 const ALOCACOES = [1, 1, 2, 3, 4, 5, 5, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+// Uma bombona para cada cliente da escala real (clientes 15 a 25).
+const ALOCACOES_REGIAO = [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
 const NO_PATIO = 5;
 const EM_ROTA_PARA = [3, 7];
 
@@ -72,12 +86,16 @@ export function popularSeVazio(db: Banco, config: Config): boolean {
     const insMov = db.prepare(
       'INSERT INTO movimentacoes (bombona_id, tipo, cliente_id, observacao, criado_em) VALUES (?, ?, ?, ?, ?)',
     );
+    const insColeta = db.prepare(
+      "INSERT INTO movimentacoes (bombona_id, tipo, cliente_id, litros, criado_em) VALUES (?, 'COLETA', ?, ?, ?)",
+    );
 
     const agora = new Date().toISOString();
     const plano = [
       ...ALOCACOES.map((cliente) => ({ status: 'EM_CLIENTE', cliente })),
       ...Array.from({ length: NO_PATIO }, () => ({ status: 'PATIO', cliente: null })),
       ...EM_ROTA_PARA.map((cliente) => ({ status: 'EM_ROTA', cliente })),
+      ...ALOCACOES_REGIAO.map((cliente) => ({ status: 'EM_CLIENTE', cliente })),
     ];
 
     plano.forEach((item, i) => {
@@ -100,6 +118,21 @@ export function popularSeVazio(db: Banco, config: Config): boolean {
         insMov.run(bombonaId, 'ENTREGA_CONCLUIDA', item.cliente, null, diasAtras(3 + (i % 9)));
       } else if (item.status === 'EM_ROTA') {
         insMov.run(bombonaId, 'SAIDA_PARA_ENTREGA', item.cliente, null, agora);
+      }
+    });
+
+    // Histórico de coletas: de 3 a 6 por cliente, uma por semana, começando 15 dias atrás.
+    // Litros em torno de uma média de 55% a 85% da capacidade, com ±15%; nunca acima da capacidade
+    // nem abaixo de 50% da média (o seed não pode disparar a RN18).
+    const capacidadeDe = db.prepare('SELECT id, capacidade_l FROM bombonas WHERE cliente_id = ? AND status = ? ORDER BY id LIMIT 1');
+    CLIENTES.forEach((_, idx) => {
+      const k = idx + 1;
+      const bombona = capacidadeDe.get(k, 'EM_CLIENTE') as { id: number; capacidade_l: number } | undefined;
+      if (!bombona) return;
+      const media = bombona.capacidade_l * (0.55 + 0.3 * rnd());
+      for (let n = 0; n < 3 + (k % 4); n++) {
+        const litros = Math.min(bombona.capacidade_l, Math.max(1, Math.round(media * (0.85 + 0.3 * rnd()))));
+        insColeta.run(bombona.id, k, litros, diasAtras(15 + 7 * n));
       }
     });
 
