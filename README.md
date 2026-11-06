@@ -19,6 +19,11 @@ bombona quase sempre está parada, então o que importa é perceber quando ela *
   tempo real;
 - se ela for longe demais, é marcada como **extraviada** e o cliente ganha um histórico de risco.
 
+Em volta disso, a operação segue o que a Bio Óleo faz de fato: cada cliente tem um **contrato** com a frequência
+da coleta, e a coleta é uma **troca** (o furgão deixa bombonas vazias e leva as cheias). O sistema tem um
+calendário próprio: a cada dia simulado ele lê os contratos, divide as coletas entre os furgões e calcula a rota
+de cada um, e os furgões fazem a rota no mapa.
+
 ![Bombona extraviada sendo acompanhada no mapa](docs/img/rastreio.png)
 
 ## Limitações assumidas
@@ -35,6 +40,12 @@ bombona quase sempre está parada, então o que importa é perceber quando ela *
 - Clientes, endereços e números do seed são **fictícios**.
 
 ## Arquitetura
+
+O **servidor é o dono do relógio e das regras**: a data simulada, as fases do dia, os contratos, o planejamento
+das rotas, a troca em cada parada e os alertas. O **simulador é o dono da verdade física**: sabe onde cada
+bombona e cada furgão estão de fato, move tudo pelas ruas e informa ao servidor o que encontrou em cada parada
+(o servidor não deduz isso, porque um rastreador mudo continua "dentro da cerca"). Cada roteiro faz **uma única
+chamada ao OSRM** (pátio → paradas → pátio) para o desenho pelas ruas e a distância.
 
 ```
 ┌─────────────┐  POST /api/telemetria   ┌──────────────────────┐   SSE /api/eventos   ┌───────────────┐
@@ -94,6 +105,8 @@ As variáveis de ambiente (tempo de sem sinal, distância de extravio etc.) est�
 | Tela         | O que mostra                                                                                     |
 |--------------|---------------------------------------------------------------------------------------------------|
 | **Mapa**     | Bombonas por status, cercas, trilha do percurso atual da selecionada (some quando ela sai para outro), botão de centralizar, indicadores e avisos ao vivo (alertas e etapas: entregue, chegou ao pátio, recarregada). Em rota: caminho que falta pelas ruas e previsão de chegada. O painel lateral (no celular, uma gaveta que abre e recolhe) tem a situação, as etapas do ciclo, a operação (entrega, coleta, recuperação), os controles da simulação e a linha do tempo |
+| **Coletas do dia** | Data simulada, botão de pausar e continuar, um cartão por furgão (paradas, bombonas pela capacidade, km, situação), a lista de paradas com o resultado de cada troca, as coletas não atendidas e o mapa com os furgões andando |
+| **Contratos** | Lista com frequência, quantidade e próximas coletas; cria, edita e encerra contratos |
 | **Alertas**  | Abertos e histórico, com resolução manual e observação                                            |
 | **Clientes** | Ranking de risco pelo histórico de incidentes                                                     |
 
@@ -101,17 +114,31 @@ As variáveis de ambiente (tempo de sem sinal, distância de extravio etc.) est�
 
 ## Roteiro de demonstração
 
-1. Abra o painel. As bombonas aparecem nos clientes, em Cianorte e nas cidades vizinhas. Duas já saem do pátio
-   em rota: clique numa delas para ver o "furgão" chegando, e a entrega se confirma sozinha.
-2. Clique numa bombona **No cliente** e, em **Simulação**, escolha **Cliente vendeu a bombona**.
-3. Em poucos segundos ela sai da cerca: abre o alerta **Fora da área**, chega o aviso e a trilha começa a ser
-   desenhada.
-4. Passando de 2 km, ela vira **Extraviada** e o cliente ganha um incidente no ranking de risco.
-5. Escolha **Devolver ao lugar**: os alertas se fecham sozinhos. Ou registre a **recuperação**: o furgão
-   leva a bombona de volta ao pátio.
-6. Registre uma **coleta com poucos litros** num cliente com histórico e veja o aviso **Coleta abaixo do
-   esperado** (RN18) na tela Alertas.
-7. Teste também **Cortar o sinal** (alerta de sem sinal depois de 45 s) e **Bateria fraca**.
+> **Sobre as vendas clandestinas.** Na vida real elas são **frequentes**: é o problema que o sistema existe para
+> tratar. Na demonstração o simulador as sorteia **raramente** (`SIM_VENDAS_POR_DIA`) só para não poluir a tela;
+> por isso o roteiro abaixo as força com botões.
+
+1. **Assista a um dia.** Abra o painel na aba **Coletas do dia**. A data simulada começa numa segunda-feira
+   (09/11). Depois da manhã (as coletas são geradas dos contratos), 2 ou 3 furgões saem do pátio, cada um com a
+   sua região, e trocam as bombonas em cada parada: veja o resultado de cada uma na lista. Um dia leva uns 2 minutos.
+2. **Pause.** O botão de pausar congela o relógio e os furgões (os rastreadores continuam mandando sinal). Use
+   para explicar o que está na tela e continue depois.
+3. **Crie o contrato do cliente sem contrato.** Na aba **Contratos** escolha o cliente que ainda não tem
+   contrato. Defina a quantidade e a frequência e veja as próximas datas. O contrato vale **a partir do
+   próximo dia** e o cliente entra na rota do dia em que cair.
+4. **Venda clandestina.** No **Mapa**, clique numa bombona **No cliente** e escolha **Cliente vendeu a bombona**:
+   ela sai da cerca, abre o alerta **Fora da área**, a trilha é desenhada e, passando de 2 km, vira
+   **Extraviada** (e o cliente ganha um incidente no ranking de risco).
+5. **Venda com rastreador arrancado.** Na aba **Coletas do dia**, clique em **Venda com rastreador arrancado**: a bombona some sem sair da
+   cerca e o rastreador fica mudo, então nenhum alerta de cerca abre (só o de sem sinal, depois de 45 s). O
+   servidor prefere uma bombona de um cliente com coleta no próximo dia. Quando o furgão chegar nesse cliente, a parada **não acha
+   a bombona**, abre o extravio e o **risco do cliente sobe**: foi o único jeito de descobrir. Na venda comum do
+   passo 4 a parada só confirma, porque o rastreador já tinha visto, e o incidente não conta duas vezes.
+6. Escolha **Devolver ao lugar**: os alertas se fecham sozinhos. Ou registre a **recuperação** de uma bombona
+   extraviada: o furgão a leva de volta ao pátio.
+7. Veja o aviso **Coleta abaixo do esperado** (RN18) na tela Alertas: de vez em quando uma troca traz bem menos
+   litros que a média do cliente.
+8. Teste também **Cortar o sinal** (alerta de sem sinal depois de 45 s) e **Bateria fraca**.
 
 ## Próximos passos (fora do protótipo)
 
