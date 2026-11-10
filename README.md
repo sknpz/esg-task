@@ -3,6 +3,29 @@
 Protótipo **hipotético** de um sistema para rastrear as bombonas que a Bio Óleo (Cianorte-PR) deixa nos
 clientes para coletar óleo de cozinha usado.
 
+## Como abrir (rápido)
+
+> Vale também para quem pede a um agente de IA (Claude, Codex etc.) "abre o projeto no navegador".
+
+1. **Node.js 23.6 ou mais novo** (`node -v`). Com o Node 22 o `npm install` só avisa, mas a API não sobe.
+2. Clone **já na branch `feat/contratos-rotas`**, que é a versão com contratos, rotas e o player (a `main` é a
+   versão antiga):
+
+   ```bash
+   git clone -b feat/contratos-rotas https://github.com/sknpz/esg-task.git
+   cd esg-task
+   npm install
+   npm run dev
+   ```
+
+   Se já clonou, rode `git checkout feat/contratos-rotas` antes do `npm install`.
+3. O `npm run dev` fica rodando (deixe o terminal aberto, ou rode em segundo plano). Quando aparecer
+   `Local: http://localhost:5173/`, abra **http://localhost:5173** no navegador.
+4. **A simulação nasce parada:** aperte **▶** na barra abaixo do cabeçalho para os furgões começarem a andar.
+
+Precisa de internet (mapa e cálculo das rotas). Detalhes em [Como rodar](#como-rodar) e
+[Roteiro de demonstração](#roteiro-de-demonstração).
+
 ## O problema
 
 Bombonas somem. O cliente vende para um sucateiro, empresta ou descarta (às vezes sem saber que a bombona
