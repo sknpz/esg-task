@@ -121,16 +121,29 @@ export function Player() {
         >
           {operacao.velocidade}x
         </button>
-        <button
-          type="button"
-          className="botao botao--pequeno player__modo"
-          disabled={ocupado}
-          aria-label={real ? 'Tempo real: furgões a 80 km/h (trocar para demonstração)' : 'Demonstração: cada roteiro em ~90 s (trocar para tempo real)'}
-          title={real ? 'Furgões a 80 km/h. Clique para o modo demonstração (cada roteiro em ~90 s)' : 'Cada roteiro em ~90 s. Clique para tempo real (80 km/h)'}
-          onClick={() => void executar(() => api.modo(real ? 'DEMO' : 'REAL'))}
-        >
-          {real ? 'Tempo real' : 'Demo 90 s'}
-        </button>
+        {/* As duas opções lado a lado, a ativa destacada: o texto diz o modo, não a ação. */}
+        <span className="player__modos" role="group" aria-label="Modo dos furgões">
+          <button
+            type="button"
+            className={`botao botao--pequeno player__modo ${real ? 'botao--primario' : ''}`}
+            disabled={ocupado}
+            aria-pressed={real}
+            title="Furgões a 80 km/h de verdade"
+            onClick={() => !real && void executar(() => api.modo('REAL'))}
+          >
+            Tempo real
+          </button>
+          <button
+            type="button"
+            className={`botao botao--pequeno player__modo ${real ? '' : 'botao--primario'}`}
+            disabled={ocupado}
+            aria-pressed={!real}
+            title="Cada roteiro em ~90 s, para apresentar"
+            onClick={() => real && void executar(() => api.modo('DEMO'))}
+          >
+            Demo 90 s
+          </button>
+        </span>
         <span className="player__data" title="Data simulada da operação">
           {formatarDataOperacao(operacao.data)} <span className="player__dia">· dia {operacao.dia}</span>
         </span>

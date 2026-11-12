@@ -1880,10 +1880,24 @@ path.leaflet-interactive:focus {
   height: 30px;
 }
 
+.player__modos {
+  display: inline-flex;
+}
+
 .player__modo {
   height: 30px;
-  min-width: 88px;
   white-space: nowrap;
+}
+
+.player__modos .player__modo:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.player__modos .player__modo:last-child {
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
 .player__data {

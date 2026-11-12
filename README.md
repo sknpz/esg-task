@@ -23,7 +23,7 @@ clientes para coletar óleo de cozinha usado.
    `Local: http://localhost:5173/`, abra **http://localhost:5173** no navegador.
 4. **A simulação nasce parada:** aperte **▶** na barra abaixo do cabeçalho para os furgões começarem a andar.
    Ela nasce também em **tempo real** (furgões a 80 km/h, um roteiro leva horas): para apresentar, aperte
-   **Tempo real** no player para trocar para **Demo 90 s**.
+   **Demo 90 s** no player.
 
 Precisa de internet (mapa e cálculo das rotas). Detalhes em [Como rodar](#como-rodar) e
 [Roteiro de demonstração](#roteiro-de-demonstração).
@@ -144,8 +144,9 @@ As variáveis de ambiente (tempo de sem sinal, distância de extravio etc.) est�
 ## Roteiro de demonstração
 
 > **O player.** A barra abaixo do cabeçalho controla a simulação em todas as abas: ▶/⏸ para rodar e pausar,
-> **1x/2x** para a velocidade, **Tempo real / Demo 90 s** para o modo, ⟲ para voltar ao começo (pede confirmação) e
-> a trilha mostra o andamento do dia (manhã, furgões na rua, fim do dia). A simulação **nasce parada e em tempo real**:
+> **1x/2x** para a velocidade, **Tempo real | Demo 90 s** para o modo (a opção ativa fica destacada), ⟲ para voltar ao começo (pede confirmação) e
+> a trilha mostra o andamento do dia (manhã, furgões na rua, fim do dia). A simulação **nasce parada e em tempo real**
+> (e volta ao tempo real toda vez que o app sobe):
 > os furgões andam a 80 km/h de verdade, então um roteiro de 120 km leva ~1h30 e o dia só vira quando todos voltam
 > ao pátio. **Para apresentar, troque para Demo 90 s** (cada roteiro em ~90 s, qualquer que seja a distância); o 2x
 > vale nos dois modos. Aperte ▶ para começar e dê **⟲ entre uma apresentação e outra** para apagar tudo e recomeçar

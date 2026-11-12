@@ -2,7 +2,7 @@ import { criarApp } from './app.ts';
 import { carregarConfig } from './config.ts';
 import { abrirBanco } from './db.ts';
 import { criarHubDeEventos } from './eventos.ts';
-import { avancarOperacao, estadoOperacao, retomarAposReinicio } from './operacao.ts';
+import { avancarOperacao, definirModo, estadoOperacao, retomarAposReinicio } from './operacao.ts';
 import { verificarSemSinal } from './regras.ts';
 import { popularSeVazio } from './seed.ts';
 
@@ -22,6 +22,8 @@ try {
 
 // Cria a operação (pausada) já na subida, para /simulacao/estado não mentir antes do primeiro tick.
 estadoOperacao(ctx);
+// Toda subida começa em tempo real: o modo demonstração é escolhido no player a cada apresentação.
+definirModo(ctx, 'REAL');
 
 // RN10: varredura de dispositivos sem sinal. Calculada sobre metade do prazo, para o 2x não atrasar a detecção.
 const intervaloVarredura = Math.max(1000, Math.min((config.semSinalSegundos / 2) * 1000, 60_000) / 3);
