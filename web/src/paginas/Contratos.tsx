@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api, type Contrato, type EntradaContrato, type Frequencia } from '../api.ts';
 import { MapaPonto } from '../componentes/MapaPonto.tsx';
-import { aplicarDiaDoInicio } from '../diaDoContrato.ts';
+import { aplicarDiaDoInicio, aplicarInicioDoDia } from '../diaDoContrato.ts';
 import { dataCurta, nomeDia, rotuloFrequencia } from '../formato.ts';
 import {
   doContrato,
@@ -66,10 +66,15 @@ export function Contratos() {
   const mudarFrequencia = (frequencia: Frequencia) => setForm((f) => aplicarDiaDoInicio({ ...f, frequencia }));
   const mudarInicio = (inicio: string) => setForm((f) => aplicarDiaDoInicio({ ...f, inicio }));
 
-  const alternarDia = (dia: number) => {
-    if (form.frequencia === 'QUINZENAL') return mudar({ diasSemana: [dia] });
-    mudar({ diasSemana: form.diasSemana.includes(dia) ? form.diasSemana.filter((d) => d !== dia) : [...form.diasSemana, dia].sort() });
-  };
+  // E o contrário: marcar um dia (ou mudar o dia do mês) leva o Início para a próxima data nesse dia, contando de hoje.
+  const hoje = operacao?.data ?? '';
+  const alternarDia = (dia: number) =>
+    setForm((f) => {
+      const diasSemana =
+        f.frequencia === 'QUINZENAL' ? [dia] : f.diasSemana.includes(dia) ? f.diasSemana.filter((d) => d !== dia) : [...f.diasSemana, dia].sort();
+      return aplicarInicioDoDia({ ...f, diasSemana }, hoje);
+    });
+  const mudarDiaMes = (diaMes: string) => setForm((f) => aplicarInicioDoDia({ ...f, diaMes }, hoje));
 
   const enviar = async (acao: () => Promise<Contrato>) => {
     setEnviando(true);
@@ -278,7 +283,7 @@ export function Contratos() {
             {form.frequencia === 'MENSAL' && (
               <label className="contrato-form__campo">
                 <span>Dia do mês</span>
-                <input className="campo" type="number" min={1} max={31} step={1} value={form.diaMes} onChange={(e) => mudar({ diaMes: e.target.value })} />
+                <input className="campo" type="number" min={1} max={31} step={1} value={form.diaMes} onChange={(e) => mudarDiaMes(e.target.value)} />
               </label>
             )}
 
