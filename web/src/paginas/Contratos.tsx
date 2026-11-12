@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { api, type Contrato, type EntradaContrato, type Frequencia, type Ponto } from '../api.ts';
+import { api, type Contrato, type EntradaContrato, type Frequencia } from '../api.ts';
 import { MapaPonto } from '../componentes/MapaPonto.tsx';
 import { aplicarDiaDoInicio } from '../diaDoContrato.ts';
 import { dataCurta, nomeDia, rotuloFrequencia } from '../formato.ts';
+import {
+  doContrato,
+  erroDoFormulario,
+  formularioDepoisDeSalvar,
+  paraEntrada,
+  vazio,
+  type ClienteNovo,
+  type Formulario,
+} from '../formularioContrato.ts';
 import { useMonitoramento } from '../monitoramento.tsx';
 
 const FREQUENCIAS: { valor: Frequencia; rotulo: string }[] = [
@@ -12,59 +21,6 @@ const FREQUENCIAS: { valor: Frequencia; rotulo: string }[] = [
   { valor: 'MENSAL', rotulo: 'Mensal' },
 ];
 const DIAS_UTEIS = [1, 2, 3, 4, 5, 6]; // seg a sáb; domingo nunca tem coleta
-
-/** O cliente digitado no "Novo contrato". */
-type ClienteNovo = { nome: string; tipo: string; cidade: string; endereco: string; ponto: Ponto | null };
-
-type Formulario = {
-  /** true: cadastra um cliente novo junto; false: usa um cliente já cadastrado (`clienteId`). */
-  clienteNovo: boolean;
-  novo: ClienteNovo;
-  clienteId: number | null;
-  quantidade: string;
-  frequencia: Frequencia;
-  diasSemana: number[];
-  diaMes: string;
-  inicio: string;
-};
-
-const novoVazio = (): ClienteNovo => ({ nome: '', tipo: '', cidade: '', endereco: '', ponto: null });
-
-const vazio = (inicio: string): Formulario => ({
-  clienteNovo: true,
-  novo: novoVazio(),
-  clienteId: null,
-  quantidade: '1',
-  frequencia: 'SEMANAL',
-  diasSemana: [],
-  diaMes: '1',
-  inicio,
-});
-
-const doContrato = (c: Contrato): Formulario => ({
-  clienteNovo: false,
-  novo: novoVazio(),
-  clienteId: c.clienteId,
-  quantidade: String(c.quantidade),
-  frequencia: c.frequencia,
-  diasSemana: c.diasSemana,
-  diaMes: String(c.diaMes ?? 1),
-  inicio: c.inicio,
-});
-
-function paraEntrada(f: Formulario): EntradaContrato {
-  const { nome, tipo, cidade, endereco, ponto } = f.novo;
-  const cliente: Pick<EntradaContrato, 'clienteId' | 'novoCliente'> =
-    f.clienteNovo && ponto ? { novoCliente: { nome, tipo, cidade, endereco, lat: ponto.lat, lng: ponto.lng } } : { clienteId: f.clienteId ?? 0 };
-  return {
-    ...cliente,
-    quantidade: Number(f.quantidade),
-    frequencia: f.frequencia,
-    diasSemana: f.frequencia === 'SEMANAL' || f.frequencia === 'QUINZENAL' ? f.diasSemana : [],
-    diaMes: f.frequencia === 'MENSAL' ? Number(f.diaMes) : null,
-    inicio: f.inicio,
-  };
-}
 
 export function Contratos() {
   const { clientes, operacao, config, recarregar } = useMonitoramento();
@@ -133,14 +89,14 @@ export function Contratos() {
 
   const salvar = async (e: FormEvent) => {
     e.preventDefault();
-    if (editando === 'novo' && form.clienteNovo) {
-      const { nome, tipo, cidade, endereco, ponto } = form.novo;
-      if (![nome, tipo, cidade, endereco].every((t) => t.trim())) return setErro('Preencha nome, tipo, cidade e endereço.');
-      if (!ponto) return setErro('Marque no mapa onde o cliente fica.');
-    } else if (form.clienteId === null) return setErro('Escolha o cliente.');
+    const falta = erroDoFormulario(form, editando === 'novo');
+    if (falta) return setErro(falta);
     const entrada = paraEntrada(form);
     const salvo = await enviar(() => (editando === 'novo' ? api.criarContrato(entrada) : api.editarContrato((editando as Contrato).id, entrada)));
-    if (salvo) setEditando(salvo); // mostra as próximas coletas calculadas pela API
+    if (salvo) {
+      setEditando(salvo); // mostra as próximas coletas calculadas pela API
+      setForm(formularioDepoisDeSalvar(salvo)); // segue editando o contrato salvo, com o cliente dele
+    }
   };
 
   const encerrar = async () => {

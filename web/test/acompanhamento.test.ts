@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { posicaoDoAcompanhado } from '../src/acompanhamento.ts';
+import { posicaoDoAcompanhado, precisaZoom } from '../src/acompanhamento.ts';
 import type { Ponto, Roteiro, StatusRoteiro } from '../src/api.ts';
 
 const rot = (id: number, status: StatusRoteiro, posicao: Ponto | null): Roteiro => ({
@@ -23,4 +23,11 @@ test('posicaoDoAcompanhado só segue furgão em andamento e com posição', () =
   assert.equal(posicaoDoAcompanhado(lista, 4), null);
   assert.equal(posicaoDoAcompanhado(lista, 9), null); // sumiu (reset, outro dia)
   assert.equal(posicaoDoAcompanhado(lista, null), null);
+});
+
+test('precisaZoom: ao ligar o acompanhamento e ao trocar de furgão; não a cada posição do mesmo', () => {
+  assert.equal(precisaZoom(null, 1), true); // ligou
+  assert.equal(precisaZoom(1, 1), false); // mesmo furgão: só recentraliza
+  assert.equal(precisaZoom(1, 2), true); // trocou de furgão: zoom de rua de novo
+  assert.equal(precisaZoom(1, null), false); // desligou
 });

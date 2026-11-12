@@ -9,3 +9,8 @@ export function posicaoDoAcompanhado(roteiros: Roteiro[], id: number | null): Po
   const r = roteiros.find((x) => x.id === id);
   return r?.status === 'EM_ANDAMENTO' && r.posicao ? r.posicao : null;
 }
+
+/** O mapa dá zoom de rua quando passa a seguir um furgão (ligou ou trocou de furgão); seguindo o mesmo, só recentraliza. */
+export function precisaZoom(seguidoAntes: number | null, agora: number | null): boolean {
+  return agora !== null && agora !== seguidoAntes;
+}

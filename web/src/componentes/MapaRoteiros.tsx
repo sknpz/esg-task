@@ -1,6 +1,7 @@
 import L from 'leaflet';
 import { useEffect, useMemo, useRef } from 'react';
 import { Circle, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, ZoomControl } from 'react-leaflet';
+import { precisaZoom } from '../acompanhamento.ts';
 import type { Ponto, Roteiro } from '../api.ts';
 import { useMonitoramento } from '../monitoramento.tsx';
 import { corDoFurgao, iconeFurgao, iconeParada, iconePatio } from './icones.ts';
@@ -14,8 +15,10 @@ const ZOOM_ACOMPANHAR = 15;
 type Props = {
   roteiros: Roteiro[];
   selecionado: number | null;
-  /** Posição do furgão acompanhado (o mapa vai atrás dele); null sem acompanhamento. */
+  /** Posição do furgão acompanhado (o mapa vai atrás dele); null sem acompanhamento ou ainda sem posição. */
   acompanhado?: Ponto | null;
+  /** Id do roteiro acompanhado: trocar de furgão dá o zoom de rua de novo. */
+  acompanhadoId?: number | null;
   /** O operador arrastou o mapa: o acompanhamento desliga. */
   aoSoltar?: () => void;
   /** Muda para pedir um novo enquadramento (ao parar de acompanhar pelo botão). */
@@ -23,7 +26,7 @@ type Props = {
 };
 
 /** Mapa do dia: rota de cada furgão pelas ruas, pinos numerados na ordem das paradas e o furgão ao vivo. */
-export function MapaRoteiros({ roteiros, selecionado, acompanhado = null, aoSoltar, reenquadrar = 0 }: Props) {
+export function MapaRoteiros({ roteiros, selecionado, acompanhado = null, acompanhadoId = null, aoSoltar, reenquadrar = 0 }: Props) {
   const { config } = useMonitoramento();
 
   return (
@@ -52,7 +55,7 @@ export function MapaRoteiros({ roteiros, selecionado, acompanhado = null, aoSolt
         );
       })}
       <Enquadrar roteiros={roteiros} selecionado={selecionado} acompanhando={acompanhado !== null} reenquadrar={reenquadrar} />
-      <Seguir alvo={acompanhado} aoSoltar={aoSoltar} />
+      <Seguir alvo={acompanhado} id={acompanhadoId} aoSoltar={aoSoltar} />
     </MapContainer>
   );
 }
@@ -93,26 +96,28 @@ function RoteiroNoMapa({ roteiro: r, cor, apagado }: { roteiro: Roteiro; cor: st
 }
 
 /**
- * Vai atrás do furgão acompanhado: zoom de rua ao ligar e, a cada posição nova, recentraliza. Arrastar o mapa desliga
- * (zoom pela roda ou pelos botões não).
+ * Vai atrás do furgão acompanhado: zoom de rua ao ligar ou trocar de furgão e, a cada posição nova, recentraliza.
+ * Arrastar o mapa desliga (zoom pela roda ou pelos botões não).
  */
-function Seguir({ alvo, aoSoltar }: { alvo: Ponto | null; aoSoltar?: () => void }) {
+function Seguir({ alvo, id, aoSoltar }: { alvo: Ponto | null; id: number | null; aoSoltar?: () => void }) {
   const map = useMap();
-  const seguindo = useRef(false);
-  const ligado = alvo !== null;
+  /** Furgão que o mapa já está seguindo (já recebeu o zoom de rua). */
+  const seguido = useRef<number | null>(null);
+  const ligado = id !== null;
 
   useEffect(() => {
-    if (!alvo) {
-      seguindo.current = false;
+    if (id === null) {
+      seguido.current = null;
       return;
     }
-    if (!seguindo.current) {
-      seguindo.current = true;
+    if (!alvo) return; // na rua, mas ainda sem posição: espera
+    if (precisaZoom(seguido.current, id)) {
+      seguido.current = id;
       map.setView(alvo, ZOOM_ACOMPANHAR);
     } else {
       map.panTo(alvo, { animate: true, duration: 0.25 });
     }
-  }, [alvo?.lat, alvo?.lng, map]);
+  }, [id, alvo?.lat, alvo?.lng, map]);
 
   useEffect(() => {
     if (!ligado || !aoSoltar) return;

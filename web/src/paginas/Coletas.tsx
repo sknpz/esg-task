@@ -202,6 +202,7 @@ export function Coletas() {
           roteiros={roteiros}
           selecionado={selecionado}
           acompanhado={alvo}
+          acompanhadoId={acompanhado}
           aoSoltar={soltar}
           reenquadrar={reenquadrar}
         />
