@@ -1743,6 +1743,9 @@ path.leaflet-interactive:focus {
   border-radius: 8px;
   cursor: pointer;
 }
+.furgao__acompanhar {
+  margin-top: 4px;
+}
 .furgao--selecionado {
   background: var(--azul-claro);
 }

@@ -1,16 +1,29 @@
 import L from 'leaflet';
 import { useEffect, useMemo, useRef } from 'react';
 import { Circle, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, ZoomControl } from 'react-leaflet';
-import type { Roteiro } from '../api.ts';
+import type { Ponto, Roteiro } from '../api.ts';
 import { useMonitoramento } from '../monitoramento.tsx';
 import { corDoFurgao, iconeFurgao, iconeParada, iconePatio } from './icones.ts';
 import { MarcadorAnimado } from './MarcadorAnimado.tsx';
 
 const URL_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const CIANORTE: [number, number] = [-23.66, -52.64];
+/** Zoom de rua ao acompanhar um furgão. */
+const ZOOM_ACOMPANHAR = 15;
+
+type Props = {
+  roteiros: Roteiro[];
+  selecionado: number | null;
+  /** Posição do furgão acompanhado (o mapa vai atrás dele); null sem acompanhamento. */
+  acompanhado?: Ponto | null;
+  /** O operador arrastou o mapa: o acompanhamento desliga. */
+  aoSoltar?: () => void;
+  /** Muda para pedir um novo enquadramento (ao parar de acompanhar pelo botão). */
+  reenquadrar?: number;
+};
 
 /** Mapa do dia: rota de cada furgão pelas ruas, pinos numerados na ordem das paradas e o furgão ao vivo. */
-export function MapaRoteiros({ roteiros, selecionado }: { roteiros: Roteiro[]; selecionado: number | null }) {
+export function MapaRoteiros({ roteiros, selecionado, acompanhado = null, aoSoltar, reenquadrar = 0 }: Props) {
   const { config } = useMonitoramento();
 
   return (
@@ -38,7 +51,8 @@ export function MapaRoteiros({ roteiros, selecionado }: { roteiros: Roteiro[]; s
           <RoteiroNoMapa key={r.id} roteiro={r} cor={cor} apagado={apagado} />
         );
       })}
-      <Enquadrar roteiros={roteiros} selecionado={selecionado} />
+      <Enquadrar roteiros={roteiros} selecionado={selecionado} acompanhando={acompanhado !== null} reenquadrar={reenquadrar} />
+      <Seguir alvo={acompanhado} aoSoltar={aoSoltar} />
     </MapContainer>
   );
 }
@@ -78,8 +92,52 @@ function RoteiroNoMapa({ roteiro: r, cor, apagado }: { roteiro: Roteiro; cor: st
   );
 }
 
-/** Enquadra todos os roteiros na primeira carga e o furgão escolhido quando muda a seleção. */
-function Enquadrar({ roteiros, selecionado }: { roteiros: Roteiro[]; selecionado: number | null }) {
+/**
+ * Vai atrás do furgão acompanhado: zoom de rua ao ligar e, a cada posição nova, recentraliza. Arrastar o mapa desliga
+ * (zoom pela roda ou pelos botões não).
+ */
+function Seguir({ alvo, aoSoltar }: { alvo: Ponto | null; aoSoltar?: () => void }) {
+  const map = useMap();
+  const seguindo = useRef(false);
+  const ligado = alvo !== null;
+
+  useEffect(() => {
+    if (!alvo) {
+      seguindo.current = false;
+      return;
+    }
+    if (!seguindo.current) {
+      seguindo.current = true;
+      map.setView(alvo, ZOOM_ACOMPANHAR);
+    } else {
+      map.panTo(alvo, { animate: true, duration: 0.25 });
+    }
+  }, [alvo?.lat, alvo?.lng, map]);
+
+  useEffect(() => {
+    if (!ligado || !aoSoltar) return;
+    map.on('dragstart', aoSoltar);
+    return () => void map.off('dragstart', aoSoltar);
+  }, [ligado, aoSoltar, map]);
+
+  return null;
+}
+
+/**
+ * Enquadra todos os roteiros na primeira carga e o furgão escolhido quando muda a seleção. Enquanto acompanha um
+ * furgão, quem manda no mapa é o `Seguir`; parar pelo botão (`reenquadrar` muda) volta a enquadrar.
+ */
+function Enquadrar({
+  roteiros,
+  selecionado,
+  acompanhando,
+  reenquadrar,
+}: {
+  roteiros: Roteiro[];
+  selecionado: number | null;
+  acompanhando: boolean;
+  reenquadrar: number;
+}) {
   const map = useMap();
   const { config } = useMonitoramento();
   const ultimo = useRef<string | null>(null);
@@ -96,12 +154,14 @@ function Enquadrar({ roteiros, selecionado }: { roteiros: Roteiro[]; selecionado
   }, [roteiros, selecionado, config]);
 
   // Só reenquadra ao trocar a seleção ou quando chegam os primeiros dados; o resto do tempo a tela é do operador.
-  const chave = `${selecionado}|${roteiros.map((r) => r.id).join(',')}|${pontos.length > 0}`;
+  const chave = `${selecionado}|${roteiros.map((r) => r.id).join(',')}|${pontos.length > 0}|${reenquadrar}`;
   useEffect(() => {
     if (pontos.length === 0 || ultimo.current === chave) return;
     ultimo.current = chave;
+    // Acompanhando: a mudança fica registrada, mas não reenquadra (nem depois, quando o arrasto soltar o furgão).
+    if (acompanhando) return;
     map.fitBounds(L.latLngBounds(pontos), { padding: [40, 40] });
-  }, [chave, pontos, map]);
+  }, [chave, pontos, map, acompanhando]);
 
   return null;
 }

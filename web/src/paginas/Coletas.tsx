@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { posicaoDoAcompanhado } from '../acompanhamento.ts';
 import { api, type Parada, type ResultadoParada, type Roteiro } from '../api.ts';
 import { corDoFurgao } from '../componentes/icones.ts';
 import { MapaRoteiros } from '../componentes/MapaRoteiros.tsx';
@@ -40,9 +41,35 @@ export function Coletas() {
   const { roteiros, operacao, bombonas, carregado } = useMonitoramento();
   const [naoAtendidas, setNaoAtendidas] = useState<Parada[]>([]);
   const [selecionado, setSelecionado] = useState<number | null>(null);
+  const [acompanhado, setAcompanhado] = useState<number | null>(null);
+  const [reenquadrar, setReenquadrar] = useState(0);
   const rodada = operacao?.rodada;
   // Os ids dos roteiros recomeçam no reset: a seleção antiga apontaria para outro furgão.
-  useEffect(() => setSelecionado(null), [rodada]);
+  useEffect(() => {
+    setSelecionado(null);
+    setAcompanhado(null);
+  }, [rodada]);
+  // O furgão acompanhado concluiu ou sumiu (outro dia): desliga, e o mapa fica onde está. Na rua ainda sem a primeira
+  // posição, espera por ela.
+  const alvo = posicaoDoAcompanhado(roteiros, acompanhado);
+  const naRua = acompanhado !== null && roteiros.some((r) => r.id === acompanhado && r.status === 'EM_ANDAMENTO');
+  useEffect(() => {
+    if (acompanhado !== null && !naRua) setAcompanhado(null);
+  }, [acompanhado, naRua]);
+  const soltar = useCallback(() => setAcompanhado(null), []);
+  const acompanhar = (id: number) => {
+    setSelecionado(id);
+    setAcompanhado(id);
+  };
+  const pararDeAcompanhar = () => {
+    setAcompanhado(null);
+    setReenquadrar((n) => n + 1);
+  };
+  const escolher = (id: number) => {
+    const novo = selecionado === id ? null : id;
+    setSelecionado(novo);
+    if (acompanhado !== null && acompanhado !== novo) setAcompanhado(null);
+  };
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -107,7 +134,7 @@ export function Coletas() {
               <button
                 className={`furgao ${selecionado === r.id ? 'furgao--selecionado' : ''}`}
                 style={{ borderLeftColor: corDoFurgao(r.numero) }}
-                onClick={() => setSelecionado(selecionado === r.id ? null : r.id)}
+                onClick={() => escolher(r.id)}
               >
                 <strong>Furgão {r.numero}</strong>
                 <span className="furgao__cidades"> · {cidadesDe(r)}</span>
@@ -116,6 +143,16 @@ export function Coletas() {
                 </span>
                 <span className="furgao__situacao">{situacao(r)}</span>
               </button>
+              {r.status === 'EM_ANDAMENTO' && (
+                <button
+                  type="button"
+                  className={`botao botao--pequeno furgao__acompanhar ${acompanhado === r.id ? 'botao--primario' : ''}`}
+                  aria-pressed={acompanhado === r.id}
+                  onClick={() => (acompanhado === r.id ? pararDeAcompanhar() : acompanhar(r.id))}
+                >
+                  {acompanhado === r.id ? 'Parar de acompanhar' : 'Acompanhar'}
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -160,7 +197,14 @@ export function Coletas() {
       </aside>
 
       <div className="coletas__mapa">
-        <MapaRoteiros key={rodada} roteiros={roteiros} selecionado={selecionado} />
+        <MapaRoteiros
+          key={rodada}
+          roteiros={roteiros}
+          selecionado={selecionado}
+          acompanhado={alvo}
+          aoSoltar={soltar}
+          reenquadrar={reenquadrar}
+        />
       </div>
     </div>
   );
