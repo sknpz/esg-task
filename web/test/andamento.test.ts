@@ -7,7 +7,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const perto = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} não é ${b}`);
 
 function op(parcial: Partial<Operacao>): Operacao {
-  return { data: '2026-11-09', diaSemana: 1, fase: 'MANHA', pausado: false, velocidade: 1, rodada: 1, dia: 1, faseDesde: iso(0), faseDuracaoMs: null, ...parcial };
+  return { data: '2026-11-09', diaSemana: 1, fase: 'MANHA', pausado: false, velocidade: 1, modo: 'REAL', rodada: 1, dia: 1, faseDesde: iso(0), faseDuracaoMs: null, ...parcial };
 }
 
 function rot(status: StatusRoteiro): Roteiro {

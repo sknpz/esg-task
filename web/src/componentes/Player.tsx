@@ -4,7 +4,7 @@ import { andamentoDoDia, type IndicesDosRoteiros } from '../andamento.ts';
 import { formatarDataOperacao } from '../formato.ts';
 import { useMonitoramento } from '../monitoramento.tsx';
 
-/** Barra de player do dia simulado: play/pause, volta ao começo, velocidade e andamento do dia. */
+/** Barra de player do dia simulado: play/pause, volta ao começo, velocidade, modo (tempo real/demonstração) e andamento do dia. */
 export function Player() {
   const { operacao, roteiros } = useMonitoramento();
   const [ocupado, setOcupado] = useState(false);
@@ -87,6 +87,7 @@ export function Player() {
   }
 
   const proxima = operacao.velocidade === 1 ? 2 : 1;
+  const real = operacao.modo === 'REAL';
   return (
     <div className="player">
       <div className="player__controles">
@@ -119,6 +120,16 @@ export function Player() {
           onClick={() => void executar(() => api.velocidade(proxima))}
         >
           {operacao.velocidade}x
+        </button>
+        <button
+          type="button"
+          className="botao botao--pequeno player__modo"
+          disabled={ocupado}
+          aria-label={real ? 'Tempo real: furgões a 80 km/h (trocar para demonstração)' : 'Demonstração: cada roteiro em ~90 s (trocar para tempo real)'}
+          title={real ? 'Furgões a 80 km/h. Clique para o modo demonstração (cada roteiro em ~90 s)' : 'Cada roteiro em ~90 s. Clique para tempo real (80 km/h)'}
+          onClick={() => void executar(() => api.modo(real ? 'DEMO' : 'REAL'))}
+        >
+          {real ? 'Tempo real' : 'Demo 90 s'}
         </button>
         <span className="player__data" title="Data simulada da operação">
           {formatarDataOperacao(operacao.data)} <span className="player__dia">· dia {operacao.dia}</span>

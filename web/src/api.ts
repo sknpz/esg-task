@@ -78,12 +78,15 @@ export type Configuracao = {
 
 export type Fase = 'MANHA' | 'ROTAS' | 'FIM';
 export type Velocidade = 1 | 2;
+/** Ritmo dos furgões: REAL (80 km/h de verdade) ou DEMO (cada roteiro em ~90 s). */
+export type Modo = 'REAL' | 'DEMO';
 export type Operacao = {
   data: string;
   diaSemana: number;
   fase: Fase;
   pausado: boolean;
   velocidade: Velocidade;
+  modo: Modo;
   rodada: number;
   dia: number;
   faseDesde: string;
@@ -181,6 +184,7 @@ export const api = {
   pausar: () => enviar<Operacao>('/operacao/pausar', {}),
   continuar: () => enviar<Operacao>('/operacao/continuar', {}),
   velocidade: (velocidade: Velocidade) => enviar<Operacao>('/operacao/velocidade', { velocidade }),
+  modo: (modo: Modo) => enviar<Operacao>('/operacao/modo', { modo }),
   resetar: () => enviar<Operacao>('/operacao/reset', {}),
   contratos: () => requisitar<Contrato[]>('/contratos'),
   criarContrato: (e: EntradaContrato) => enviar<Contrato>('/contratos', e),

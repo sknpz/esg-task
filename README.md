@@ -22,6 +22,8 @@ clientes para coletar óleo de cozinha usado.
 3. O `npm run dev` fica rodando (deixe o terminal aberto, ou rode em segundo plano). Quando aparecer
    `Local: http://localhost:5173/`, abra **http://localhost:5173** no navegador.
 4. **A simulação nasce parada:** aperte **▶** na barra abaixo do cabeçalho para os furgões começarem a andar.
+   Ela nasce também em **tempo real** (furgões a 80 km/h, um roteiro leva horas): para apresentar, aperte
+   **Tempo real** no player para trocar para **Demo 90 s**.
 
 Precisa de internet (mapa e cálculo das rotas). Detalhes em [Como rodar](#como-rodar) e
 [Roteiro de demonstração](#roteiro-de-demonstração).
@@ -142,15 +144,18 @@ As variáveis de ambiente (tempo de sem sinal, distância de extravio etc.) est�
 ## Roteiro de demonstração
 
 > **O player.** A barra abaixo do cabeçalho controla a simulação em todas as abas: ▶/⏸ para rodar e pausar,
-> **1x/2x** para a velocidade, ⟲ para voltar ao começo (pede confirmação) e a trilha mostra o andamento do dia
-> (manhã, furgões na rua, fim do dia). A simulação **nasce parada**: aperte ▶ para começar, use **2x** quando
-> quiser acelerar e dê **⟲ entre uma apresentação e outra** para apagar tudo e recomeçar na segunda-feira, dia 1.
+> **1x/2x** para a velocidade, **Tempo real / Demo 90 s** para o modo, ⟲ para voltar ao começo (pede confirmação) e
+> a trilha mostra o andamento do dia (manhã, furgões na rua, fim do dia). A simulação **nasce parada e em tempo real**:
+> os furgões andam a 80 km/h de verdade, então um roteiro de 120 km leva ~1h30 e o dia só vira quando todos voltam
+> ao pátio. **Para apresentar, troque para Demo 90 s** (cada roteiro em ~90 s, qualquer que seja a distância); o 2x
+> vale nos dois modos. Aperte ▶ para começar e dê **⟲ entre uma apresentação e outra** para apagar tudo e recomeçar
+> na segunda-feira, dia 1, em tempo real.
 
 > **Sobre as vendas clandestinas.** Na vida real elas são **frequentes**: é o problema que o sistema existe para
 > tratar. Na demonstração o simulador as sorteia **raramente** (`SIM_VENDAS_POR_DIA`) só para não poluir a tela;
 > por isso o roteiro abaixo as força com botões.
 
-1. **Assista a um dia.** Abra o painel na aba **Coletas do dia** e aperte ▶. A data simulada começa numa
+1. **Assista a um dia.** Abra o painel na aba **Coletas do dia**, troque para **Demo 90 s** e aperte ▶. A data simulada começa numa
    segunda-feira (09/11). Depois da manhã (as coletas são geradas dos contratos), 2 ou 3 furgões saem do pátio, cada um com a
    sua região, e trocam as bombonas em cada parada: veja o resultado de cada uma na lista. Um dia leva uns 2 minutos (1 minuto em 2x).
 2. **Pause.** O botão ⏸ congela o relógio e os furgões (os rastreadores continuam mandando sinal). Use

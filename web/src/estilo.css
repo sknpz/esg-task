@@ -1793,6 +1793,12 @@ path.leaflet-interactive:focus {
   height: 30px;
 }
 
+.player__modo {
+  height: 30px;
+  min-width: 88px;
+  white-space: nowrap;
+}
+
 .player__data {
   margin-left: 8px;
   font-weight: 700;
