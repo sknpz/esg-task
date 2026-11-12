@@ -109,8 +109,13 @@ export type Contrato = {
   situacao: 'ATIVO' | 'ENCERRADO';
   proximas: string[];
 };
+/** Cliente digitado no "Novo contrato": nasce junto com o contrato (cerca de 150 m, até 250 km do pátio). */
+export type NovoClienteEntrada = { nome: string; tipo: string; cidade: string; endereco: string; lat: number; lng: number };
+
+/** Um dos dois: `clienteId` (cliente já cadastrado) ou `novoCliente`. */
 export type EntradaContrato = {
-  clienteId: number;
+  clienteId?: number;
+  novoCliente?: NovoClienteEntrada;
   quantidade: number;
   frequencia: Frequencia;
   diasSemana: number[];

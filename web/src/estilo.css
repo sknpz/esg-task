@@ -1610,6 +1610,50 @@ path.leaflet-interactive:focus {
   gap: 4px 14px;
 }
 
+.cliente-novo {
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+}
+
+.cliente-novo > legend {
+  padding: 0 4px;
+}
+
+.link-acao {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--azul);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.mapa-ponto {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mapa-ponto__mapa {
+  height: 220px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+}
+
+.pino-novo {
+  width: 18px;
+  height: 18px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: var(--verde);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
+}
+
 .contrato-form__acoes {
   display: flex;
   flex-wrap: wrap;

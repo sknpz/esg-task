@@ -135,7 +135,7 @@ As variáveis de ambiente (tempo de sem sinal, distância de extravio etc.) est�
 |--------------|---------------------------------------------------------------------------------------------------|
 | **Mapa**     | Bombonas por status, cercas, trilha do percurso atual da selecionada (some quando ela sai para outro), botão de centralizar, indicadores e avisos ao vivo (alertas e etapas: entregue, chegou ao pátio, recarregada). Em rota: caminho que falta pelas ruas e previsão de chegada. O painel lateral (no celular, uma gaveta que abre e recolhe) tem a situação, as etapas do ciclo, a operação (entrega, coleta, recuperação), os controles da simulação e a linha do tempo |
 | **Coletas do dia** | Data simulada, um cartão por furgão (paradas, bombonas pela capacidade, km, situação), a lista de paradas com o resultado de cada troca, as coletas não atendidas e o mapa com os furgões andando |
-| **Contratos** | Lista com frequência, quantidade e próximas coletas; cria, edita e encerra contratos |
+| **Contratos** | Lista com frequência, quantidade e próximas coletas; cria, edita e encerra contratos. O contrato novo já vem com o dia da data de início marcado e pode cadastrar um **cliente novo** junto (nome, tipo, cidade, endereço e o local clicado num mapa, até 250 km do pátio) |
 | **Alertas**  | Abertos e histórico, com resolução manual e observação                                            |
 | **Clientes** | Ranking de risco pelo histórico de incidentes, com pesquisa (nome, cidade ou endereço, sem ligar para acentos), filtros por risco e por modalidade do contrato (diária, semanal, quinzenal, mensal, sem contrato) e ordenação por bombonas (clique no cabeçalho) |
 
@@ -160,8 +160,9 @@ As variáveis de ambiente (tempo de sem sinal, distância de extravio etc.) est�
    sua região, e trocam as bombonas em cada parada: veja o resultado de cada uma na lista. Um dia leva uns 2 minutos (1 minuto em 2x).
 2. **Pause.** O botão ⏸ congela o relógio e os furgões (os rastreadores continuam mandando sinal). Use
    para explicar o que está na tela e continue depois.
-3. **Crie o contrato do cliente sem contrato.** Na aba **Contratos** escolha o cliente que ainda não tem
-   contrato. Defina a quantidade e a frequência e veja as próximas datas. O contrato vale **a partir do
+3. **Crie um contrato com um cliente novo.** Na aba **Contratos**, aperte **Novo contrato**, digite o nome, o tipo,
+   a cidade e o endereço e clique no mapa onde o cliente fica (ou use **usar cliente já cadastrado** para o cliente
+   que ainda não tem contrato). Defina a quantidade e a frequência e veja as próximas datas. O contrato vale **a partir do
    próximo dia** e o cliente entra na rota do dia em que cair.
 4. **Venda clandestina.** No **Mapa**, clique numa bombona **No cliente** e escolha **Cliente vendeu a bombona**:
    ela sai da cerca, abre o alerta **Fora da área**, a trilha é desenhada e, passando de 2 km, vira

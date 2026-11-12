@@ -109,6 +109,10 @@ emprestada, levada por outra empresa de coleta ou simplesmente descartada.
   `QUINZENAL` exatamente um dia da semana (a cada 14 dias, contando da primeira ocorrência depois do início),
   `MENSAL` um dia do mês de 1 a 31 (mês sem esse dia cai no último dia; coleta que cai num domingo passa para a
   segunda). **Domingo nunca tem coleta.** Contrato encerrado não pode mais ser alterado (`409`).
+  O contrato novo pode trazer um **cliente novo** (`novoCliente`: nome, tipo, cidade, endereço e o ponto no mapa) no
+  lugar de um cliente já cadastrado (um dos dois, senão `400`). O cliente nasce junto com o contrato, numa transação
+  só (contrato recusado não deixa cliente sem contrato), com cerca de 150 m, e o ponto precisa ficar a até
+  **250 km do pátio** (a área de atuação; fora dela, `400`).
 - **RN20 – Coletas do dia.** O servidor é dono do relógio e cada dia simulado tem três fases: **manhã** (as
   coletas do dia são geradas dos contratos e divididas entre os furgões; depois de `FASE_PAUSA_S` os furgões
   saem), **rotas** (os furgões fazem as paradas) e **fim do dia** (só depois de todos os furgões voltarem, e

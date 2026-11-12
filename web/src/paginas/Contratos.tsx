@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { api, type Contrato, type EntradaContrato, type Frequencia } from '../api.ts';
+import { api, type Contrato, type EntradaContrato, type Frequencia, type Ponto } from '../api.ts';
+import { MapaPonto } from '../componentes/MapaPonto.tsx';
 import { aplicarDiaDoInicio } from '../diaDoContrato.ts';
 import { dataCurta, nomeDia, rotuloFrequencia } from '../formato.ts';
 import { useMonitoramento } from '../monitoramento.tsx';
@@ -12,7 +13,13 @@ const FREQUENCIAS: { valor: Frequencia; rotulo: string }[] = [
 ];
 const DIAS_UTEIS = [1, 2, 3, 4, 5, 6]; // seg a sáb; domingo nunca tem coleta
 
+/** O cliente digitado no "Novo contrato". */
+type ClienteNovo = { nome: string; tipo: string; cidade: string; endereco: string; ponto: Ponto | null };
+
 type Formulario = {
+  /** true: cadastra um cliente novo junto; false: usa um cliente já cadastrado (`clienteId`). */
+  clienteNovo: boolean;
+  novo: ClienteNovo;
   clienteId: number | null;
   quantidade: string;
   frequencia: Frequencia;
@@ -21,9 +28,22 @@ type Formulario = {
   inicio: string;
 };
 
-const vazio = (inicio: string): Formulario => ({ clienteId: null, quantidade: '1', frequencia: 'SEMANAL', diasSemana: [], diaMes: '1', inicio });
+const novoVazio = (): ClienteNovo => ({ nome: '', tipo: '', cidade: '', endereco: '', ponto: null });
+
+const vazio = (inicio: string): Formulario => ({
+  clienteNovo: true,
+  novo: novoVazio(),
+  clienteId: null,
+  quantidade: '1',
+  frequencia: 'SEMANAL',
+  diasSemana: [],
+  diaMes: '1',
+  inicio,
+});
 
 const doContrato = (c: Contrato): Formulario => ({
+  clienteNovo: false,
+  novo: novoVazio(),
   clienteId: c.clienteId,
   quantidade: String(c.quantidade),
   frequencia: c.frequencia,
@@ -33,8 +53,11 @@ const doContrato = (c: Contrato): Formulario => ({
 });
 
 function paraEntrada(f: Formulario): EntradaContrato {
+  const { nome, tipo, cidade, endereco, ponto } = f.novo;
+  const cliente: Pick<EntradaContrato, 'clienteId' | 'novoCliente'> =
+    f.clienteNovo && ponto ? { novoCliente: { nome, tipo, cidade, endereco, lat: ponto.lat, lng: ponto.lng } } : { clienteId: f.clienteId ?? 0 };
   return {
-    clienteId: f.clienteId ?? 0,
+    ...cliente,
     quantidade: Number(f.quantidade),
     frequencia: f.frequencia,
     diasSemana: f.frequencia === 'SEMANAL' || f.frequencia === 'QUINZENAL' ? f.diasSemana : [],
@@ -44,7 +67,7 @@ function paraEntrada(f: Formulario): EntradaContrato {
 }
 
 export function Contratos() {
-  const { clientes, operacao, recarregar } = useMonitoramento();
+  const { clientes, operacao, config, recarregar } = useMonitoramento();
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [editando, setEditando] = useState<Contrato | 'novo' | null>(null);
   const [form, setForm] = useState<Formulario>(vazio(''));
@@ -62,6 +85,7 @@ export function Contratos() {
   const ativos = contratos.filter((c) => c.situacao === 'ATIVO');
   const encerrados = contratos.filter((c) => c.situacao === 'ENCERRADO');
   const semContrato = useMemo(() => clientes.filter((c) => !c.contratoAtivo), [clientes]);
+  const tipos = useMemo(() => [...new Set(clientes.map((c) => c.tipo))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [clientes]);
 
   const abrirNovo = () => {
     setEditando('novo');
@@ -80,6 +104,7 @@ export function Contratos() {
   };
 
   const mudar = (parte: Partial<Formulario>) => setForm((f) => ({ ...f, ...parte }));
+  const mudarNovo = (parte: Partial<ClienteNovo>) => setForm((f) => ({ ...f, novo: { ...f.novo, ...parte } }));
 
   // Escolher a frequência ou mudar o Início marca o dia do Início; depois o operador ajusta à mão se quiser.
   const mudarFrequencia = (frequencia: Frequencia) => setForm((f) => aplicarDiaDoInicio({ ...f, frequencia }));
@@ -108,7 +133,11 @@ export function Contratos() {
 
   const salvar = async (e: FormEvent) => {
     e.preventDefault();
-    if (form.clienteId === null) return setErro('Escolha o cliente.');
+    if (editando === 'novo' && form.clienteNovo) {
+      const { nome, tipo, cidade, endereco, ponto } = form.novo;
+      if (![nome, tipo, cidade, endereco].every((t) => t.trim())) return setErro('Preencha nome, tipo, cidade e endereço.');
+      if (!ponto) return setErro('Marque no mapa onde o cliente fica.');
+    } else if (form.clienteId === null) return setErro('Escolha o cliente.');
     const entrada = paraEntrada(form);
     const salvo = await enviar(() => (editando === 'novo' ? api.criarContrato(entrada) : api.editarContrato((editando as Contrato).id, entrada)));
     if (salvo) setEditando(salvo); // mostra as próximas coletas calculadas pela API
@@ -133,7 +162,7 @@ export function Contratos() {
           <h1>Contratos</h1>
           <p className="suave">Cada cliente tem um contrato ativo, que define quantas bombonas ele recebe e em quais dias a coleta acontece.</p>
         </div>
-        <button type="button" className="botao botao--primario" onClick={abrirNovo} disabled={semContrato.length === 0}>
+        <button type="button" className="botao botao--primario" onClick={abrirNovo}>
           Novo contrato
         </button>
       </div>
@@ -187,20 +216,73 @@ export function Contratos() {
           <form className="contrato-form" onSubmit={salvar}>
             <h2>{emEdicao ? `Editar contrato · ${emEdicao.cliente.nome}` : 'Novo contrato'}</h2>
 
-            <label className="contrato-form__campo">
-              <span>Cliente</span>
-              {emEdicao ? (
-                <input className="campo" value={`${emEdicao.cliente.nome} (${emEdicao.cliente.cidade})`} disabled />
-              ) : (
-                <select className="campo" value={form.clienteId ?? ''} onChange={(e) => mudar({ clienteId: Number(e.target.value) })}>
-                  {semContrato.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome} ({c.cidade})
+            {emEdicao || !form.clienteNovo ? (
+              <label className="contrato-form__campo">
+                <span>Cliente</span>
+                {emEdicao ? (
+                  <input className="campo" value={`${emEdicao.cliente.nome} (${emEdicao.cliente.cidade})`} disabled />
+                ) : (
+                  <select className="campo" value={form.clienteId ?? ''} onChange={(e) => mudar({ clienteId: Number(e.target.value) })}>
+                    {semContrato.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome} ({c.cidade})
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {!emEdicao && (
+                  <button type="button" className="link-acao" onClick={() => mudar({ clienteNovo: true })}>
+                    cadastrar cliente novo
+                  </button>
+                )}
+              </label>
+            ) : (
+              <fieldset className="contrato-form__campo cliente-novo">
+                <legend>Cliente novo</legend>
+                <label className="contrato-form__campo">
+                  <span>Nome</span>
+                  <input className="campo" maxLength={120} value={form.novo.nome} onChange={(e) => mudarNovo({ nome: e.target.value })} />
+                </label>
+                <label className="contrato-form__campo">
+                  <span>Tipo</span>
+                  <select className="campo" value={form.novo.tipo} onChange={(e) => mudarNovo({ tipo: e.target.value })}>
+                    <option value="" disabled>
+                      Escolha o tipo
                     </option>
-                  ))}
-                </select>
-              )}
-            </label>
+                    {tipos.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="contrato-form__campo">
+                  <span>Cidade</span>
+                  <input className="campo" value={form.novo.cidade} onChange={(e) => mudarNovo({ cidade: e.target.value })} />
+                </label>
+                <label className="contrato-form__campo">
+                  <span>Endereço</span>
+                  <input className="campo" value={form.novo.endereco} onChange={(e) => mudarNovo({ endereco: e.target.value })} />
+                </label>
+                <div className="contrato-form__campo">
+                  <span>Local no mapa</span>
+                  {config ? (
+                    <MapaPonto ponto={form.novo.ponto} patio={config.patio} aoEscolher={(ponto) => mudarNovo({ ponto })} />
+                  ) : (
+                    <p className="suave pequeno">Carregando o mapa…</p>
+                  )}
+                </div>
+                {semContrato.length > 0 && (
+                  <button
+                    type="button"
+                    className="link-acao"
+                    onClick={() => mudar({ clienteNovo: false, clienteId: form.clienteId ?? semContrato[0].id })}
+                  >
+                    usar cliente já cadastrado
+                  </button>
+                )}
+              </fieldset>
+            )}
 
             <label className="contrato-form__campo">
               <span>Quantidade de bombonas</span>
