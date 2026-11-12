@@ -8,17 +8,16 @@ clientes para coletar óleo de cozinha usado.
 > Vale também para quem pede a um agente de IA (Claude, Codex etc.) "abre o projeto no navegador".
 
 1. **Node.js 23.6 ou mais novo** (`node -v`). Com o Node 22 o `npm install` só avisa, mas a API não sobe.
-2. Clone **já na branch `feat/contratos-rotas`**, que é a versão com contratos, rotas e o player (a `main` é a
-   versão antiga):
+2. Clone o repositório (a `main` já é a versão com contratos, rotas e o player):
 
    ```bash
-   git clone -b feat/contratos-rotas https://github.com/sknpz/esg-task.git
+   git clone https://github.com/sknpz/esg-task.git
    cd esg-task
    npm install
    npm run dev
    ```
 
-   Se já clonou, rode `git checkout feat/contratos-rotas` antes do `npm install`.
+   Se já clonou antes, rode `git checkout main && git pull` antes do `npm install`.
 3. O `npm run dev` fica rodando (deixe o terminal aberto, ou rode em segundo plano). Quando aparecer
    `Local: http://localhost:5173/`, abra **http://localhost:5173** no navegador.
 4. **A simulação nasce parada:** aperte **▶** na barra abaixo do cabeçalho para os furgões começarem a andar.
