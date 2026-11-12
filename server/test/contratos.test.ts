@@ -119,3 +119,46 @@ it('banco na versão 2 é recriado na versão 5', () => {
   assert.ok(cols('movimentacoes').includes('incidente'));
   db.close();
 });
+
+describe('contrato com cliente novo', () => {
+  const patio = ctx.config.patio;
+  const kmAoNorte = (km: number) => ({ lat: patio.lat + km / 111.195, lng: patio.lng });
+  const novo = (parcial: Record<string, unknown> = {}) => ({
+    quantidade: 2,
+    frequencia: 'SEMANAL',
+    diasSemana: [3],
+    inicio: '2026-11-11',
+    novoCliente: { nome: '  Bar do Zé  ', tipo: 'Bar', cidade: 'Cianorte', endereco: 'Rua A, 1', ...kmAoNorte(5), ...parcial },
+  });
+  const totalClientes = () => (ctx.db.prepare('SELECT COUNT(*) AS n FROM clientes').get() as { n: number }).n;
+
+  it('cria cliente e contrato juntos, com o nome aparado e cerca de 150 m', async () => {
+    const r = await post('/contratos', novo());
+    assert.equal(r.status, 201);
+    assert.equal(r.corpo.cliente.nome, 'Bar do Zé');
+    assert.equal(r.corpo.frequencia, 'SEMANAL');
+    const c = ctx.db.prepare('SELECT nome, tipo, cidade, endereco, raio_m FROM clientes WHERE id = ?').get(r.corpo.clienteId) as Record<string, unknown>;
+    assert.deepEqual({ ...c }, { nome: 'Bar do Zé', tipo: 'Bar', cidade: 'Cianorte', endereco: 'Rua A, 1', raio_m: 150 });
+  });
+
+  it('recusa clienteId e novoCliente juntos, e nenhum dos dois', async () => {
+    assert.equal((await post('/contratos', { ...novo(), clienteId: clienteNovo() })).status, 400);
+    const { novoCliente: _, ...sem } = novo();
+    assert.equal((await post('/contratos', sem)).status, 400);
+  });
+
+  it('recusa nome só de espaços, lat não numérico e ponto a mais de 250 km, sem gravar cliente', async () => {
+    const antes = totalClientes();
+    for (const parcial of [{ nome: '   ' }, { lat: 'abc' }, { lng: null }, { tipo: '' }, { cidade: 3 }, { endereco: ' ' }, { nome: 'x'.repeat(121) }, kmAoNorte(251)])
+      assert.equal((await post('/contratos', novo(parcial))).status, 400, JSON.stringify(parcial));
+    assert.equal(totalClientes(), antes);
+    assert.equal((await post('/contratos', novo(kmAoNorte(249)))).status, 201);
+  });
+
+  it('regra do contrato inválida não deixa cliente órfão', async () => {
+    const antes = totalClientes();
+    const r = await post('/contratos', { ...novo(), diasSemana: [] });
+    assert.equal(r.status, 400);
+    assert.equal(totalClientes(), antes);
+  });
+});
