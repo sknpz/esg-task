@@ -1371,6 +1371,46 @@ path.leaflet-interactive:focus {
   font-weight: 600;
 }
 
+.clientes__filtros {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.clientes__busca {
+  max-width: 420px;
+}
+
+.clientes__filtros .filtros {
+  align-items: center;
+  margin-top: 8px;
+}
+
+.clientes__rotulo {
+  min-width: 64px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-suave);
+}
+
+.clientes__contador {
+  margin-top: 8px;
+}
+
+.cabecalho-ordenar {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.cabecalho-ordenar:hover {
+  color: var(--texto);
+}
+
 .resumo-risco .selo:not(:first-child) {
   margin-left: 10px;
 }

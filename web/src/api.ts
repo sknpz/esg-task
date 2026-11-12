@@ -58,6 +58,8 @@ export type Cliente = {
   ultimoIncidente: string | null;
   risco: 'BAIXO' | 'MEDIO' | 'ALTO';
   contratoAtivo: boolean;
+  /** Frequência do contrato ativo; null sem contrato ativo. */
+  modalidade: Frequencia | null;
 };
 
 export type Indicadores = {

@@ -213,7 +213,8 @@ export function listarClientes(db: Banco) {
               (SELECT COUNT(*) FROM bombonas b WHERE b.cliente_id = c.id AND b.status IN ('EM_CLIENTE', 'EXTRAVIADA')) AS bombonas,
               (SELECT COUNT(*) FROM incidentes i WHERE i.cliente_id = c.id) AS incidentes,
               (SELECT MAX(i.em) FROM incidentes i WHERE i.cliente_id = c.id) AS ultimoIncidente,
-              EXISTS (SELECT 1 FROM contratos k WHERE k.cliente_id = c.id AND k.situacao = 'ATIVO') AS contratoAtivo
+              EXISTS (SELECT 1 FROM contratos k WHERE k.cliente_id = c.id AND k.situacao = 'ATIVO') AS contratoAtivo,
+              (SELECT k.frequencia FROM contratos k WHERE k.cliente_id = c.id AND k.situacao = 'ATIVO') AS modalidade
        FROM clientes c ORDER BY incidentes DESC, c.nome`,
     )
     .all() as Array<{ incidentes: number; contratoAtivo: number }>;

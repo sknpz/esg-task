@@ -137,7 +137,7 @@ As variáveis de ambiente (tempo de sem sinal, distância de extravio etc.) est�
 | **Coletas do dia** | Data simulada, um cartão por furgão (paradas, bombonas pela capacidade, km, situação), a lista de paradas com o resultado de cada troca, as coletas não atendidas e o mapa com os furgões andando |
 | **Contratos** | Lista com frequência, quantidade e próximas coletas; cria, edita e encerra contratos |
 | **Alertas**  | Abertos e histórico, com resolução manual e observação                                            |
-| **Clientes** | Ranking de risco pelo histórico de incidentes                                                     |
+| **Clientes** | Ranking de risco pelo histórico de incidentes, com pesquisa (nome, cidade ou endereço, sem ligar para acentos), filtros por risco e por modalidade do contrato (diária, semanal, quinzenal, mensal, sem contrato) e ordenação por bombonas (clique no cabeçalho) |
 
 ![Alertas abertos](docs/img/alertas.png)
 

@@ -99,6 +99,8 @@ describe('contratos (RN19)', () => {
     const lista = (await enviar('GET', '/clientes')).corpo as any[];
     assert.equal(lista.find((c) => c.id === com).contratoAtivo, true);
     assert.equal(lista.find((c) => c.id === sem).contratoAtivo, false);
+    assert.equal(lista.find((c) => c.id === com).modalidade, 'SEMANAL');
+    assert.equal(lista.find((c) => c.id === sem).modalidade, null);
   });
 });
 
