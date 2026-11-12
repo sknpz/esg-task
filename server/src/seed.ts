@@ -62,8 +62,9 @@ const CLIENTES = [
 const ALOCACOES = [1, 1, 2, 3, 4, 5, 5, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 // Uma bombona para cada cliente da escala real (clientes 15 a 25).
 const ALOCACOES_REGIAO = [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
-const NO_PATIO = 5;
-const EM_ROTA_PARA = [3, 7];
+// Inclui BO-0023 e BO-0024, que na primeira versão nasciam "em rota" sem furgão (entrega manual): na versão com
+// roteiros a bombona só viaja dentro do furgão, então elas começam no pátio.
+const NO_PATIO = 7;
 // Bombonas novas (BO-0036 em diante) dos clientes 26 a 49; o 50 não tem nenhuma.
 const BOMBONAS_NOVAS = [2, 1, 2, 1, 3, 1, 2, 1, 2, 1, 1, 2, 1, 1, 2, 1, 3, 1, 2, 1, 1, 2, 1, 1];
 const NO_PATIO_EXTRA = 30;
@@ -133,7 +134,6 @@ export function popularSeVazio(db: Banco, config: Config): boolean {
     const plano = [
       ...ALOCACOES.map((cliente) => ({ status: 'EM_CLIENTE', cliente })),
       ...Array.from({ length: NO_PATIO }, () => ({ status: 'PATIO', cliente: null })),
-      ...EM_ROTA_PARA.map((cliente) => ({ status: 'EM_ROTA', cliente })),
       ...ALOCACOES_REGIAO.map((cliente) => ({ status: 'EM_CLIENTE', cliente })),
     ];
 
@@ -142,9 +142,8 @@ export function popularSeVazio(db: Banco, config: Config): boolean {
       const dispositivo = `DEV-${String(i + 1).padStart(4, '0')}`;
       const cliente = item.cliente ? CLIENTES[item.cliente - 1] : null;
       const capacidade = item.capacidade ?? (cliente?.tipo === 'Indústria de alimentos' ? 200 : 50);
-      // Bombona em rota acabou de sair do pátio.
       const base = item.status === 'EM_CLIENTE' && cliente ? cliente : config.patio;
-      const pos = perto(base.lat, base.lng, item.status === 'EM_ROTA' ? 400 : 25);
+      const pos = perto(base.lat, base.lng, 25);
       // Uma bombona começa com a bateria no limite, para mostrar o alerta logo de cara.
       const bateria = i === 6 ? 21 : Math.round(45 + rnd() * 55);
 
@@ -155,8 +154,6 @@ export function popularSeVazio(db: Banco, config: Config): boolean {
       if (item.status === 'EM_CLIENTE') {
         insMov.run(bombonaId, 'SAIDA_PARA_ENTREGA', item.cliente, null, diasAtras(3 + (i % 9) + 0.1));
         insMov.run(bombonaId, 'ENTREGA_CONCLUIDA', item.cliente, null, diasAtras(3 + (i % 9)));
-      } else if (item.status === 'EM_ROTA') {
-        insMov.run(bombonaId, 'SAIDA_PARA_ENTREGA', item.cliente, null, agora);
       }
     };
     plano.forEach(inserirBombona);

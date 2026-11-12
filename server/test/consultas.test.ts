@@ -32,14 +32,17 @@ describe('API de consulta', () => {
       assert.ok(b.localEsperado, b.codigo);
       assert.ok(b.distanciaM < 150, `${b.codigo} está a ${b.distanciaM} m`);
     }
-    const emRota = bombonas.filter((b: any) => b.status === 'EM_ROTA');
-    assert.equal(emRota.length, 2);
-    assert.ok(emRota.every((b: any) => b.localEsperado === null && b.destino));
+    // Nenhuma nasce em rota sem furgão (BO-0023 e BO-0024 começam no pátio).
+    assert.equal(bombonas.filter((b: any) => b.status === 'EM_ROTA').length, 0);
+    assert.deepEqual(
+      bombonas.filter((b: any) => ['BO-0023', 'BO-0024'].includes(b.codigo)).map((b: any) => b.status),
+      ['PATIO', 'PATIO'],
+    );
   });
 
   it('filtra por status', async () => {
     const patio = await (await fetch(`${api.url}/bombonas?status=PATIO`)).json();
-    assert.equal(patio.length, 41);
+    assert.equal(patio.length, 43);
   });
 
   it('detalha uma bombona com histórico e devolve 404 para código inexistente', async () => {
@@ -143,7 +146,8 @@ describe('API de consulta', () => {
   it('resume os indicadores', async () => {
     const ind = await (await fetch(`${api.url}/indicadores`)).json();
     assert.equal(ind.total, 107);
-    assert.deepEqual(ind.porStatus, { PATIO: 41, EM_ROTA: 2, EM_CLIENTE: 64, EXTRAVIADA: 0 });
+    // Ninguém nasce em rota: na versão com roteiros, bombona só viaja dentro do furgão.
+    assert.deepEqual(ind.porStatus, { PATIO: 43, EM_ROTA: 0, EM_CLIENTE: 64, EXTRAVIADA: 0 });
     assert.equal(ind.alertasAbertos, 0);
   });
 });

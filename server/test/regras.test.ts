@@ -133,6 +133,13 @@ describe('motor de regras', () => {
 
   it('bombona em rota não gera alerta e conclui a entrega ao chegar (RN13, RN04)', async () => {
     const c = await cenario();
+    // Saída manual do pátio para o cliente 3 (o seed não tem bombona em rota).
+    const saida = await fetch(`${c.api.url}/bombonas/BO-0023/entrega`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clienteId: 3 }),
+    });
+    assert.equal(saida.status, 200, await saida.clone().text());
     const emRota = await c.bombona('BO-0023');
     assert.equal(emRota.status, 'EM_ROTA');
     await c.enviar('BO-0023', aoNorte(emRota.destino, 5000));
