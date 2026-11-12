@@ -18,6 +18,11 @@ export function comprimentoM(pontos: Ponto[]) {
   return total;
 }
 
+/** Metros por tick a uma velocidade em km/h. */
+export function passoPorKmh(kmh: number, tickMs: number) {
+  return ((kmh / 3.6) * tickMs) / 1000;
+}
+
 /** Metros por tick: a velocidade base, ou mais rápido se a base estourar o limite de ticks da viagem. */
 export function passoDaViagem(comprimentoM: number, passoBaseM: number, ticksMax: number) {
   return Math.max(passoBaseM, comprimentoM / ticksMax);

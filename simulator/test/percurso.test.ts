@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { comprimentoM, passoDaViagem } from '../src/percurso.ts';
+import { comprimentoM, passoDaViagem, passoPorKmh } from '../src/percurso.ts';
+
+test('passoPorKmh: 80 km/h a 250 ms anda ~5,56 m por tick', () => {
+  assert.ok(Math.abs(passoPorKmh(80, 250) - 5.5556) < 0.001);
+});
 
 test('passoDaViagem: curta mantém a velocidade de sempre', () => {
   assert.equal(passoDaViagem(1_000, 25, 360), 25);

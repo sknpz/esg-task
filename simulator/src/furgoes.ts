@@ -2,12 +2,14 @@
  * Furgões do simulador: cada roteiro EM_ANDAMENTO do servidor vira um furgão que sai do pátio, passa pelas paradas
  * na ordem (trocando bombonas em cada uma) e volta ao pátio, pelas ruas.
  *
- * Uma única consulta ao OSRM por roteiro (pátio → paradas → pátio). O passo é ajustado para a rota inteira caber em
- * ~DURACAO_ROTEIRO_S, contando a pausa de cada parada. O que o furgão acha no cliente vem de quem o chama (o
+ * Uma única consulta ao OSRM por roteiro (pátio → paradas → pátio). Em tempo real o furgão anda o passo real (80 km/h);
+ * em demonstração, o passo é ajustado para a rota inteira caber em ~DURACAO_ROTEIRO_S, contando a pausa de cada
+ * parada. O furgão guarda os dois e usa o do modo atual a cada tick. O que o furgão acha no cliente vem de quem o chama (o
  * simulador é quem sabe o que foi vendido); os litros são gerados aqui, em torno do esperado do cliente.
  */
 
 import { distanciaM, comprimentoM, passoDaViagem, type Ponto } from './percurso.ts';
+import type { Modo } from './relogio.ts';
 
 export type StatusParada = 'PENDENTE' | 'FEITA' | 'NAO_ATENDIDA';
 export type ParadaRemota = {
@@ -149,6 +151,8 @@ export type OpcoesFrota = {
   patio: Ponto;
   tempo: Tempo;
   passoBaseM: number;
+  /** Metros por tick em tempo real (80 km/h por padrão). */
+  passoRealM: number;
   esperaEntreTentativasMs: number;
   /** Se a bombona (por código) está de fato no cliente: o simulador é quem sabe o que foi vendido. */
   estaNoCliente: (codigo: string) => boolean;
@@ -166,7 +170,9 @@ type Furgao = {
   rota?: {
     pontos: Ponto[];
     proximo: number;
-    passo: number;
+    /** Metros por tick no modo demonstração (rota inteira em ~DURACAO_ROTEIRO_S) e em tempo real. */
+    passoDemo: number;
+    passoReal: number;
     /** Paradas ainda por fazer, em ordem, com o índice do ponto da rota onde o furgão para. */
     paradas: Array<{ indice: number; parada: ParadaRemota }>;
   };
@@ -237,8 +243,8 @@ export function criarFrota(op: OpcoesFrota) {
       // Termina no próprio pátio, que pode ficar fora da rua.
       const pontos = [...osrm.pontos, op.patio];
       const indices = indicesDasParadas(pontos, pendentes);
-      const passo = passoDoRoteiro(comprimentoM([partida, ...pontos]), op.passoBaseM, pendentes.length, op.tempo);
-      f.rota = { pontos, proximo: 0, passo, paradas: pendentes.map((parada, i) => ({ indice: indices[i], parada })) };
+      const passoDemo = passoDoRoteiro(comprimentoM([partida, ...pontos]), op.passoBaseM, pendentes.length, op.tempo);
+      f.rota = { pontos, proximo: 0, passoDemo, passoReal: op.passoRealM, paradas: pendentes.map((parada, i) => ({ indice: indices[i], parada })) };
       f.trajeto = {
         corpo: JSON.stringify({ pontos: simplificarTrajeto(pontos, indices), distanciaM: Math.round(osrm.distanciaM) }),
         tentativa: novaTentativa(),
@@ -246,7 +252,8 @@ export function criarFrota(op: OpcoesFrota) {
       const de = partida === op.patio ? 'do pátio' : 'da última parada feita';
       console.log(
         `[${nome(f)}] rota ${de}: ${pendentes.length} paradas, ${(osrm.distanciaM / 1000).toFixed(1)} km, ` +
-          `${pontos.length} pontos pelas ruas, ${Math.round((passo * 1000) / op.tempo.tickMs)} m/s`,
+          `${pontos.length} pontos pelas ruas; ${Math.round((op.passoRealM * 3600) / op.tempo.tickMs)} km/h em tempo real, ` +
+          `${Math.round((passoDemo * 1000) / op.tempo.tickMs)} m/s em demonstração`,
       );
       void enviarTrajeto(f);
     } catch (e) {
@@ -301,7 +308,7 @@ export function criarFrota(op: OpcoesFrota) {
   }
 
   /** Um tick do furgão: pausa na parada e troca, volta ao pátio e conclusão, ou anda. */
-  function andar(f: Furgao, velocidade: number) {
+  function andar(f: Furgao, velocidade: number, modo: Modo) {
     const rota = f.rota!;
     const alvo = rota.paradas[0];
     if (alvo && rota.proximo > alvo.indice) {
@@ -320,7 +327,8 @@ export function criarFrota(op: OpcoesFrota) {
     }
     const limite = alvo ? alvo.indice : rota.pontos.length - 1;
     const antes = f.posicao;
-    const r = avancar(rota.pontos, f.posicao, rota.proximo, rota.passo * velocidade, limite);
+    const passo = modo === 'REAL' ? rota.passoReal : rota.passoDemo;
+    const r = avancar(rota.pontos, f.posicao, rota.proximo, passo * velocidade, limite);
     f.posicao = r.posicao;
     rota.proximo = r.proximo;
     f.emMovimento = distanciaM(antes, f.posicao) > 0;
@@ -329,9 +337,9 @@ export function criarFrota(op: OpcoesFrota) {
   return {
     /**
      * Um ciclo da frota com o estado do servidor: cria o furgão de cada roteiro novo, esquece os que saíram da lista
-     * e, fora da pausa, anda (em 2x, o dobro por ciclo). Devolve os envios de posição do ciclo.
+     * e, fora da pausa, anda no ritmo do modo (em 2x, o dobro por ciclo). Devolve os envios de posição do ciclo.
      */
-    ciclo(roteiros: RoteiroRemoto[], pausado: boolean, velocidade: number): Promise<void>[] {
+    ciclo(roteiros: RoteiroRemoto[], pausado: boolean, velocidade: number, modo: Modo): Promise<void>[] {
       const ativos = new Set(roteiros.map((r) => r.id));
       for (const id of furgoes.keys()) if (!ativos.has(id)) furgoes.delete(id);
 
@@ -359,7 +367,7 @@ export function criarFrota(op: OpcoesFrota) {
         }
         if (f.trajeto) void enviarTrajeto(f);
         if (pausado || f.envio.ocupado) continue;
-        andar(f, velocidade);
+        andar(f, velocidade, modo);
         if (f.emMovimento) {
           const furgao = f;
           envios.push(

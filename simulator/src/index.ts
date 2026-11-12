@@ -11,8 +11,8 @@
  */
 
 import { consultarOsrm, criarFrota, type RoteiroRemoto } from './furgoes.ts';
-import { comprimentoM, distanciaM, M_POR_GRAU_LAT, mPorGrauLng, passoDaViagem, type Ponto } from './percurso.ts';
-import { consumoDeBateria, consumirSilencio, rodadaMudou, silencioDoCenarioMs } from './relogio.ts';
+import { comprimentoM, distanciaM, M_POR_GRAU_LAT, mPorGrauLng, passoDaViagem, passoPorKmh, type Ponto } from './percurso.ts';
+import { consumoDeBateria, consumirSilencio, rodadaMudou, silencioDoCenarioMs, type Modo } from './relogio.ts';
 
 type Local = Ponto & { nome: string; raioM: number };
 type Status = 'PATIO' | 'EM_ROTA' | 'EM_CLIENTE' | 'EXTRAVIADA';
@@ -33,7 +33,7 @@ type DispositivoRemoto = {
 };
 type Comando = { id: number; bombona: string; tipo: 'VENDA' | 'DEVOLUCAO' | 'SEM_SINAL' | 'BATERIA_FRACA' | 'VENDA_SILENCIOSA' };
 type Estado = {
-  operacao: { data: string; pausado: boolean; velocidade: 1 | 2; rodada: number };
+  operacao: { data: string; pausado: boolean; velocidade: 1 | 2; modo?: Modo; rodada: number };
   roteiros: RoteiroRemoto[];
   dispositivos: DispositivoRemoto[];
   comandos: Comando[];
@@ -78,6 +78,8 @@ function numeroDoAmbiente(nome: string, padrao: number) {
 }
 /** Duração alvo de um roteiro inteiro (pátio → paradas → pátio), pausas incluídas. */
 const DURACAO_ROTEIRO_S = numeroDoAmbiente('SIM_DURACAO_ROTEIRO_S', 90);
+/** Velocidade dos furgões no modo tempo real. */
+const VELOCIDADE_REAL_KMH = numeroDoAmbiente('SIM_VELOCIDADE_REAL_KMH', 80);
 /** Pausa do furgão em cada parada, para a troca ficar visível. */
 const PAUSA_PARADA_MS = numeroDoAmbiente('SIM_PAUSA_PARADA_MS', 1000);
 const PASSO_VENDA_M = (73 * TICK_MS) / 1000;
@@ -346,6 +348,7 @@ function novaFrota() {
     patio,
     tempo: { duracaoS: DURACAO_ROTEIRO_S, pausaMs: PAUSA_PARADA_MS, tickMs: TICK_MS },
     passoBaseM: PASSO_FURGAO_M,
+    passoRealM: passoPorKmh(VELOCIDADE_REAL_KMH, TICK_MS),
     esperaEntreTentativasMs: ESPERA_ENTRE_TENTATIVAS_MS,
     estaNoCliente,
     cabecalhos: (): Record<string, string> => (rodada === undefined ? {} : { 'X-Rodada': String(rodada) }),
@@ -356,6 +359,8 @@ async function tick() {
   const estado = await buscarEstado();
   const { operacao, roteiros, comandos } = estado;
   const { pausado, velocidade, rodada } = operacao;
+  // Servidor antigo sem o campo: tempo real, o padrão.
+  const modo: Modo = operacao.modo ?? 'REAL';
   const decorridoMs = Date.now() - ultimoTickEm;
   ultimoTickEm = Date.now();
   // Reset: o servidor semeou tudo de novo (tokens e ids novos). Recomeça como se tivesse acabado de subir, antes de
@@ -376,7 +381,7 @@ async function tick() {
   vendasDoDia(operacao.data, pausado);
 
   // Pausado: ninguém se move (furgão, venda, devolução); os parados continuam mandando a última posição.
-  const envios = frota.ciclo(roteiros, pausado, velocidade);
+  const envios = frota.ciclo(roteiros, pausado, velocidade, modo);
   for (const ap of aparelhos.values()) {
     // Rastreador arrancado: nunca mais manda leitura.
     if (ap.arrancada) continue;
@@ -405,7 +410,7 @@ async function tick() {
     } else if (!pausado) {
       emMovimento = mover(ap, viagem, velocidade);
     }
-    ap.bateria = Math.max(0, ap.bateria - consumoDeBateria(emMovimento, pausado, velocidade, TICK_MS));
+    ap.bateria = Math.max(0, ap.bateria - consumoDeBateria(emMovimento, pausado, velocidade, TICK_MS, modo));
     // A leitura repetida logo ao parar marca o fim do percurso, mesmo que a bombona saia de novo em menos de 1 s.
     const acabouDeParar = !emMovimento && ap.ticksParado === 0;
     ap.ticksParado = emMovimento ? 0 : ap.ticksParado + 1;
@@ -436,7 +441,10 @@ async function principal() {
   await aguardarApi();
   await tick();
   console.log(`Simulando ${aparelhos.size} rastreadores (ciclo de ${TICK_MS / 1000} s).`);
-  console.log(`Furgões: roteiro em ~${DURACAO_ROTEIRO_S} s, ${PAUSA_PARADA_MS} ms por parada. Vendas sorteadas: ${VENDAS_POR_DIA} por dia.`);
+  console.log(
+    `Furgões: ${VELOCIDADE_REAL_KMH} km/h em tempo real, roteiro em ~${DURACAO_ROTEIRO_S} s em demonstração; ` +
+      `${PAUSA_PARADA_MS} ms por parada. Vendas sorteadas: ${VENDAS_POR_DIA} por dia.`,
+  );
 
   let rodando = false;
   setInterval(async () => {

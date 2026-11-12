@@ -115,7 +115,7 @@ test('montarEncontradas leva as procuradas que estão lá, com a capacidade de c
 type Chamada = { url: string; headers: Record<string, string> };
 
 /** Frota de um roteiro com uma parada a ~1 km a leste do pátio; OSRM e POSTs são falsos. */
-async function frotaComFetchFalso(cabecalhos: () => Record<string, string>) {
+async function frotaComFetchFalso(cabecalhos: () => Record<string, string>, segurarOsrm?: Promise<void>) {
   const patio = { lat: -23.66, lng: -52.6 };
   const parada = { lat: -23.66, lng: -52.59 };
   const chamadas: Chamada[] = [];
@@ -124,6 +124,7 @@ async function frotaComFetchFalso(cabecalhos: () => Record<string, string>) {
     const u = String(url);
     chamadas.push({ url: u, headers: (init?.headers ?? {}) as Record<string, string> });
     if (u.includes('/route/v1/')) {
+      await segurarOsrm;
       const coordinates = [patio, parada, patio].map((p) => [p.lng, p.lat]);
       return new Response(JSON.stringify({ routes: [{ distance: 2000, geometry: { coordinates } }] }), { status: 200 });
     }
@@ -136,6 +137,7 @@ async function frotaComFetchFalso(cabecalhos: () => Record<string, string>) {
     patio,
     tempo: { duracaoS: 100_000, pausaMs: 1000, tickMs: 250 },
     passoBaseM: 25,
+    passoRealM: 5,
     esperaEntreTentativasMs: 2000,
     estaNoCliente: () => true,
     cabecalhos,
@@ -148,7 +150,7 @@ async function frotaComFetchFalso(cabecalhos: () => Record<string, string>) {
       { id: 10, ordem: 1, status: 'PENDENTE' as const, clienteId: 1, nome: 'C', ...parada, litrosEsperados: null, procuradas: [] },
     ],
   };
-  frota.ciclo([roteiro], false, 1); // começa a planejar
+  frota.ciclo([roteiro], false, 1, 'DEMO'); // começa a planejar
   await new Promise((ok) => setTimeout(ok, 20));
   return { frota, roteiro, chamadas, restaurar: () => (globalThis.fetch = original) };
 }
@@ -158,8 +160,8 @@ test('em 2x o furgão anda o dobro por ciclo', async () => {
   const b = await frotaComFetchFalso(() => ({}));
   try {
     const inicio = a.frota.posicao(1)!.posicao;
-    await Promise.all(a.frota.ciclo([a.roteiro], false, 1));
-    await Promise.all(b.frota.ciclo([b.roteiro], false, 2));
+    await Promise.all(a.frota.ciclo([a.roteiro], false, 1, 'DEMO'));
+    await Promise.all(b.frota.ciclo([b.roteiro], false, 2, 'DEMO'));
     const d1 = distanciaM(inicio, a.frota.posicao(1)!.posicao);
     const d2 = distanciaM(inicio, b.frota.posicao(1)!.posicao);
     assert.ok(d1 > 20, `d1: ${d1}`);
@@ -173,11 +175,64 @@ test('em 2x o furgão anda o dobro por ciclo', async () => {
 test('todo POST da frota leva os cabeçalhos', async () => {
   const f = await frotaComFetchFalso(() => ({ 'X-Rodada': '7' }));
   try {
-    await Promise.all(f.frota.ciclo([f.roteiro], false, 1));
+    await Promise.all(f.frota.ciclo([f.roteiro], false, 1, 'DEMO'));
     const posts = f.chamadas.filter((c) => c.url.includes('/roteiros/'));
     assert.ok(posts.some((c) => c.url.endsWith('/posicao')), 'sem POST de posição');
     assert.ok(posts.some((c) => c.url.endsWith('/trajeto')), 'sem POST de trajeto');
     for (const c of posts) assert.equal(c.headers['X-Rodada'], '7', c.url);
+  } finally {
+    f.restaurar();
+  }
+});
+
+test('em tempo real o furgão anda o passo real; em demonstração, o passo do roteiro', async () => {
+  // Rota de ~2 km com duração alvo enorme: o passo de demonstração é o base (25 m); o real é 5 m.
+  const a = await frotaComFetchFalso(() => ({}));
+  const b = await frotaComFetchFalso(() => ({}));
+  try {
+    const inicio = a.frota.posicao(1)!.posicao;
+    await Promise.all(a.frota.ciclo([a.roteiro], false, 1, 'REAL'));
+    await Promise.all(b.frota.ciclo([b.roteiro], false, 1, 'DEMO'));
+    const real = distanciaM(inicio, a.frota.posicao(1)!.posicao);
+    const demo = distanciaM(inicio, b.frota.posicao(1)!.posicao);
+    assert.ok(Math.abs(real - 5) < 0.5, `real: ${real}`);
+    assert.ok(Math.abs(demo - 25) < 0.5, `demo: ${demo}`);
+  } finally {
+    b.restaurar();
+    a.restaurar();
+  }
+});
+
+test('trocar o modo no meio da rota continua de onde estava, no ritmo novo', async () => {
+  const f = await frotaComFetchFalso(() => ({}));
+  try {
+    const inicio = f.frota.posicao(1)!.posicao;
+    await Promise.all(f.frota.ciclo([f.roteiro], false, 1, 'DEMO'));
+    const meio = f.frota.posicao(1)!.posicao;
+    await Promise.all(f.frota.ciclo([f.roteiro], false, 1, 'REAL'));
+    const total = distanciaM(inicio, f.frota.posicao(1)!.posicao);
+    const ultimo = distanciaM(meio, f.frota.posicao(1)!.posicao);
+    assert.ok(Math.abs(total - 30) < 0.5, `total: ${total}`);
+    assert.ok(Math.abs(ultimo - 5) < 0.5, `último: ${ultimo}`);
+  } finally {
+    f.restaurar();
+  }
+});
+
+test('trocar o modo antes de a rota ficar pronta não quebra; o furgão sai no ritmo do modo atual', async () => {
+  let soltar!: () => void;
+  const segurar = new Promise<void>((ok) => (soltar = ok));
+  const f = await frotaComFetchFalso(() => ({}), segurar);
+  try {
+    const inicio = f.frota.posicao(1)!.posicao;
+    await Promise.all(f.frota.ciclo([f.roteiro], false, 1, 'REAL'));
+    await Promise.all(f.frota.ciclo([f.roteiro], false, 1, 'DEMO'));
+    assert.equal(distanciaM(inicio, f.frota.posicao(1)!.posicao), 0);
+    soltar();
+    await new Promise((ok) => setTimeout(ok, 20));
+    await Promise.all(f.frota.ciclo([f.roteiro], false, 1, 'REAL'));
+    const andou = distanciaM(inicio, f.frota.posicao(1)!.posicao);
+    assert.ok(Math.abs(andou - 5) < 0.5, `andou: ${andou}`);
   } finally {
     f.restaurar();
   }
