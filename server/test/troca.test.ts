@@ -630,7 +630,7 @@ describe('API dos furgões (simulador)', () => {
     const [roteiro] = roteirosDoDia(ctx.db, ctx.config, SEGUNDA).roteiros;
 
     const estado = (await chamar('/simulacao/estado')).corpo;
-    assert.deepEqual(estado.operacao, { data: SEGUNDA, pausado: false, velocidade: 1, rodada: 1 });
+    assert.deepEqual(estado.operacao, { data: SEGUNDA, pausado: false, velocidade: 1, modo: 'REAL', rodada: 1 });
     assert.equal(estado.roteiros.length, 1);
     const [r] = estado.roteiros;
     assert.equal(r.id, roteiro.id);

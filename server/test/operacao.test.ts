@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { avancarOperacao, continuar, definirVelocidade, estadoOperacao } from '../src/operacao.ts';
+import { avancarOperacao, continuar, definirModo, definirVelocidade, estadoOperacao } from '../src/operacao.ts';
 import { criarContexto, subirApi } from './apoio.ts';
 
 const ctx = criarContexto();
@@ -151,6 +151,32 @@ describe('relógio da operação: pausa, velocidade, rodada', () => {
     assert.equal(e.rodada, 1);
     assert.equal(e.dia, 1);
     assert.equal(e.fase, 'MANHA');
+  });
+
+  it('banco novo nasce em tempo real', () => {
+    assert.equal(estadoOperacao(criarContexto()).modo, 'REAL');
+  });
+
+  it('definirModo grava, emite operacao e não mexe em fase_desde', () => {
+    const c = criarContexto();
+    const antes = estadoOperacao(c).faseDesde;
+    const vistos: Array<{ tipo: string }> = [];
+    c.eventos.ouvir((e) => vistos.push(e));
+    const e = definirModo(c, 'DEMO');
+    assert.equal(e.modo, 'DEMO');
+    assert.equal(estadoOperacao(c).modo, 'DEMO');
+    assert.equal(e.faseDesde, antes);
+    assert.ok(vistos.some((v) => v.tipo === 'operacao'));
+  });
+
+  it('POST /operacao/modo aceita REAL e DEMO e recusa o resto', async () => {
+    const demo = await post('/operacao/modo', { modo: 'DEMO' });
+    assert.equal(demo.status, 200);
+    assert.equal(demo.corpo.modo, 'DEMO');
+    assert.equal((await get('/simulacao/estado', { Authorization: `Bearer ${ctx.config.tokenSimulador}` })).operacao.modo, 'DEMO');
+    assert.equal((await post('/operacao/modo', { modo: 'RAPIDO' })).status, 400);
+    assert.equal((await post('/operacao/modo', {})).status, 400);
+    assert.equal((await post('/operacao/modo', { modo: 'REAL' })).corpo.modo, 'REAL');
   });
 
   it('pausado na criação, a manhã não avança', () => {

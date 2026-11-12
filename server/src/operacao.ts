@@ -15,12 +15,15 @@ import { dividirEmRoteiros, type ParadaPlano } from './roteirizacao.ts';
 
 export type Fase = 'MANHA' | 'ROTAS' | 'FIM';
 export type Velocidade = 1 | 2;
+/** Ritmo dos furgões: REAL (80 km/h de verdade) ou DEMO (cada roteiro em ~90 s). */
+export type Modo = 'REAL' | 'DEMO';
 export type EstadoOperacao = {
   data: string;
   diaSemana: number;
   fase: Fase;
   pausado: boolean;
   velocidade: Velocidade;
+  modo: Modo;
   rodada: number;
   dia: number;
   faseDesde: string;
@@ -319,10 +322,10 @@ export function iniciarRoteiros(ctx: Contexto, data: string): void {
 
 // ---------------------------------------------------------------- relógio
 
-type LinhaOperacao = { data: string; fase: Fase; fase_desde: string; pausado: number; velocidade: Velocidade; rodada: number };
+type LinhaOperacao = { data: string; fase: Fase; fase_desde: string; pausado: number; velocidade: Velocidade; modo: Modo; rodada: number };
 
 const lerLinha = (db: Banco) =>
-  db.prepare('SELECT data, fase, fase_desde, pausado, velocidade, rodada FROM operacao WHERE id = 1').get() as LinhaOperacao | undefined;
+  db.prepare('SELECT data, fase, fase_desde, pausado, velocidade, modo, rodada FROM operacao WHERE id = 1').get() as LinhaOperacao | undefined;
 
 const paraEstado = (l: LinhaOperacao, config: Config): EstadoOperacao => ({
   data: l.data,
@@ -330,6 +333,7 @@ const paraEstado = (l: LinhaOperacao, config: Config): EstadoOperacao => ({
   fase: l.fase,
   pausado: l.pausado === 1,
   velocidade: l.velocidade,
+  modo: l.modo,
   rodada: l.rodada,
   dia: diaDeOperacao(config.dataInicialOperacao, l.data),
   faseDesde: l.fase_desde,
@@ -350,7 +354,7 @@ export function criarOperacao(ctx: Contexto, rodada: number, agora = Date.now())
   const data = ctx.config.dataInicialOperacao;
   transacao(ctx.db, () => {
     ctx.db
-      .prepare("INSERT INTO operacao (id, data, fase, fase_desde, pausado, velocidade, rodada) VALUES (1, ?, 'MANHA', ?, 1, 1, ?)")
+      .prepare("INSERT INTO operacao (id, data, fase, fase_desde, pausado, velocidade, modo, rodada) VALUES (1, ?, 'MANHA', ?, 1, 1, 'REAL', ?)")
       .run(data, agoraIso(), rodada);
     planejar(ctx, data);
   });
@@ -456,6 +460,15 @@ export function definirVelocidade(ctx: Contexto, velocidade: Velocidade, agora =
       ctx.db.prepare('UPDATE operacao SET velocidade = ?, fase_desde = ? WHERE id = 1').run(velocidade, new Date(desde).toISOString()),
     );
   }
+  const estado = estadoOperacao(ctx);
+  ctx.eventos.emitir({ tipo: 'operacao', dados: estado });
+  return estado;
+}
+
+/** Troca tempo real / demonstração. Só o simulador muda de ritmo: as fases Manhã e Fim não dependem do modo. */
+export function definirModo(ctx: Contexto, modo: Modo): EstadoOperacao {
+  estadoOperacao(ctx);
+  transacao(ctx.db, () => ctx.db.prepare('UPDATE operacao SET modo = ? WHERE id = 1').run(modo));
   const estado = estadoOperacao(ctx);
   ctx.eventos.emitir({ tipo: 'operacao', dados: estado });
   return estado;

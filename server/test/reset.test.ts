@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { criarContrato } from '../src/contratos.ts';
 import type { Evento } from '../src/eventos.ts';
-import { avancarOperacao, continuar, definirVelocidade, estadoOperacao } from '../src/operacao.ts';
+import { avancarOperacao, continuar, definirModo, definirVelocidade, estadoOperacao } from '../src/operacao.ts';
 import { registrarTroca } from '../src/operacao.ts';
 import { resetarSimulacao } from '../src/reset.ts';
 import { criarContexto, subirApi } from './apoio.ts';
@@ -15,6 +15,7 @@ const contar = (ctx: ReturnType<typeof criarContexto>, tabela: string) =>
 function sujar(ctx: ReturnType<typeof criarContexto>) {
   continuar(ctx);
   definirVelocidade(ctx, 2);
+  definirModo(ctx, 'DEMO');
   criarContrato(ctx, { clienteId: 50, quantidade: 1, frequencia: 'DIARIA', inicio: '2026-11-02' });
   ctx.db.prepare("INSERT INTO simulacao_comandos (bombona_id, tipo, criado_em) VALUES (1, 'VENDA', ?)").run(new Date().toISOString());
   avancarOperacao(ctx, Date.now() + 3_600_000);
@@ -32,7 +33,7 @@ describe('reset', () => {
     resetarSimulacao(ctx);
     for (const t of TABELAS) assert.equal(contar(ctx, t), contar(novo, t), t);
     const e = estadoOperacao(ctx);
-    assert.deepEqual([e.pausado, e.velocidade, e.fase, e.data, e.dia], [true, 1, 'MANHA', '2026-11-09', 1]);
+    assert.deepEqual([e.pausado, e.velocidade, e.modo, e.fase, e.data, e.dia], [true, 1, 'REAL', 'MANHA', '2026-11-09', 1]);
   });
 
   it('cada reset sobe a rodada', () => {

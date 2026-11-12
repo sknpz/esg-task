@@ -4,6 +4,7 @@ import { dataOperacao } from '../contratos.ts';
 import {
   concluirRoteiro,
   continuar,
+  definirModo,
   definirVelocidade,
   estadoOperacao,
   pausar,
@@ -50,6 +51,12 @@ export function rotasDeRoteiros(ctx: Contexto) {
     const velocidade = req.body?.velocidade;
     if (velocidade !== 1 && velocidade !== 2) return void res.status(400).json({ erro: 'velocidade deve ser 1 ou 2' });
     res.json(definirVelocidade(ctx, velocidade));
+  });
+
+  r.post('/operacao/modo', (req, res) => {
+    const modo = req.body?.modo;
+    if (modo !== 'REAL' && modo !== 'DEMO') return void res.status(400).json({ erro: 'modo deve ser REAL ou DEMO' });
+    res.json(definirModo(ctx, modo));
   });
 
   r.post('/operacao/reset', (_req, res) => {

@@ -109,13 +109,14 @@ export function rotasDeSimulacao(ctx: Contexto) {
         .all(agoraIso()),
     );
 
-    const linhaOp = db.prepare('SELECT pausado, velocidade, rodada FROM operacao WHERE id = 1').get() as
-      | { pausado: number; velocidade: number; rodada: number }
+    const linhaOp = db.prepare('SELECT pausado, velocidade, modo, rodada FROM operacao WHERE id = 1').get() as
+      | { pausado: number; velocidade: number; modo: 'REAL' | 'DEMO'; rodada: number }
       | undefined;
     const operacao = {
       data: dataOperacao(ctx),
       pausado: linhaOp?.pausado === 1,
       velocidade: linhaOp?.velocidade ?? 1,
+      modo: linhaOp?.modo ?? 'REAL',
       rodada: linhaOp?.rodada ?? 1,
     };
 

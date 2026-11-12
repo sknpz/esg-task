@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS operacao (
   fase_desde TEXT    NOT NULL,
   pausado    INTEGER NOT NULL DEFAULT 0,
   velocidade INTEGER NOT NULL DEFAULT 1 CHECK (velocidade IN (1, 2)),
+  modo       TEXT    NOT NULL DEFAULT 'REAL' CHECK (modo IN ('REAL', 'DEMO')),
   rodada     INTEGER NOT NULL DEFAULT 1
 );
 
@@ -150,7 +151,7 @@ CREATE TABLE IF NOT EXISTS simulacao_comandos (
 `;
 
 /** Versão do esquema; um banco mais antigo é descartado e recriado (os dados são de demonstração). */
-export const VERSAO_ESQUEMA = 4;
+export const VERSAO_ESQUEMA = 5;
 
 function descartarSeDesatualizado(caminho: string) {
   if (caminho === ':memory:' || !fs.existsSync(caminho)) return;
