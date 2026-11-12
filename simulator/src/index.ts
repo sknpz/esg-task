@@ -6,9 +6,13 @@
  *
  * Para saber onde cada bombona deveria estar e quais cenários o painel pediu, ele consulta o canal
  * de controle da demonstração (GET /api/simulacao/estado). Esse canal não existe num cenário real.
+ *
+ * Também dirige os furgões dos roteiros do dia (furgoes.ts): as bombonas dentro de um furgão vão junto com ele.
  */
 
-import { comprimentoM, distanciaM, M_POR_GRAU_LAT, mPorGrauLng, passoDaViagem, type Ponto } from './percurso.ts';
+import { consultarOsrm, criarFrota, type RoteiroRemoto } from './furgoes.ts';
+import { comprimentoM, distanciaM, M_POR_GRAU_LAT, mPorGrauLng, passoDaViagem, passoPorKmh, type Ponto } from './percurso.ts';
+import { consumoDeBateria, consumirSilencio, rodadaMudou, silencioDoCenarioMs, type Modo } from './relogio.ts';
 
 type Local = Ponto & { nome: string; raioM: number };
 type Status = 'PATIO' | 'EM_ROTA' | 'EM_CLIENTE' | 'EXTRAVIADA';
@@ -21,8 +25,19 @@ type DispositivoRemoto = {
   posicao: Ponto | null;
   bateria: number | null;
   alvo: Local | null;
+  /** Furgão (roteiro) em que a bombona está; null fora de furgão. */
+  roteiroId: number | null;
+  clienteId: number | null;
+  /** Vendida com o rastreador arrancado (servidor guarda o cenário): vale ao recriar o aparelho num reinício. */
+  arrancada: boolean;
 };
-type Comando = { id: number; bombona: string; tipo: 'VENDA' | 'DEVOLUCAO' | 'SEM_SINAL' | 'BATERIA_FRACA' };
+type Comando = { id: number; bombona: string; tipo: 'VENDA' | 'DEVOLUCAO' | 'SEM_SINAL' | 'BATERIA_FRACA' | 'VENDA_SILENCIOSA' };
+type Estado = {
+  operacao: { data: string; pausado: boolean; velocidade: 1 | 2; modo?: Modo; rodada: number };
+  roteiros: RoteiroRemoto[];
+  dispositivos: DispositivoRemoto[];
+  comandos: Comando[];
+};
 
 type Aparelho = {
   remoto: DispositivoRemoto;
@@ -32,7 +47,10 @@ type Aparelho = {
   desvio?: boolean;
   /** A bombona está sendo devolvida ao local esperado. */
   devolvendo?: boolean;
-  caladoAte?: number;
+  /** Vendida com o rastreador arrancado: não manda mais leitura e o furgão não a acha no cliente. */
+  arrancada?: boolean;
+  /** Silêncio que falta (ms simulados); undefined = falando. */
+  caladoMs?: number;
   ticksParado: number;
   /** Caminho pelas ruas da viagem atual (pontos que ainda faltam). */
   rota?: { chave: string; pontos: Ponto[]; passo: number };
@@ -40,7 +58,7 @@ type Aparelho = {
   planejando?: { chave: string; ocupado: boolean; proximaEm: number };
 };
 
-/** Um deslocamento pelas ruas: furgão, comprador ou devolução. */
+/** Um deslocamento pelas ruas de uma bombona sozinha: recuperação (furgão), comprador ou devolução. */
 type Viagem = { chave: string; doFurgao: boolean; nome: string; passo: number; buscar: () => Promise<Ponto[]> };
 
 const API = process.env.API_URL ?? 'http://localhost:3333/api';
@@ -52,10 +70,19 @@ const TICKS_ENTRE_SINAIS_PARADA = Math.max(1, Math.round(1000 / TICK_MS));
 const PASSO_FURGAO_M = (100 * TICK_MS) / 1000;
 /** Teto de duração de uma viagem do furgão: viagens longas aceleram para caber nele. */
 const DURACAO_MAX_VIAGEM_S = 90;
+/** Número do ambiente; 0 vale (desliga), ausente ou inválido usa o padrão. */
+function numeroDoAmbiente(nome: string, padrao: number) {
+  const texto = process.env[nome];
+  const valor = Number(texto);
+  return texto !== undefined && texto.trim() !== '' && Number.isFinite(valor) ? valor : padrao;
+}
+/** Duração alvo de um roteiro inteiro (pátio → paradas → pátio), pausas incluídas. */
+const DURACAO_ROTEIRO_S = numeroDoAmbiente('SIM_DURACAO_ROTEIRO_S', 90);
+/** Velocidade dos furgões no modo tempo real. */
+const VELOCIDADE_REAL_KMH = numeroDoAmbiente('SIM_VELOCIDADE_REAL_KMH', 80);
+/** Pausa do furgão em cada parada, para a troca ficar visível. */
+const PAUSA_PARADA_MS = numeroDoAmbiente('SIM_PAUSA_PARADA_MS', 1000);
 const PASSO_VENDA_M = (73 * TICK_MS) / 1000;
-/** Consumo de bateria por tick, em pontos percentuais. */
-const CONSUMO_MOVIMENTO = (0.05 / 3000) * TICK_MS;
-const CONSUMO_PARADA = (0.01 / 3000) * TICK_MS;
 /** Serviço de rotas (OSRM). Toda viagem anda pelas ruas: sem resposta dele, a bombona espera e tenta de novo. */
 const ROTEADOR = process.env.ROTEADOR_URL ?? 'https://router.project-osrm.org';
 const ESPERA_ENTRE_TENTATIVAS_MS = 2000;
@@ -63,11 +90,25 @@ const ESPERA_ENTRE_TENTATIVAS_MS = 2000;
 const VENDA_DISTANCIA_MINIMA_M = 3000;
 const VENDA_DESVIO_MAXIMO = 3;
 const VENDA_SORTEIOS = 5;
-/** Minutos entre "vendas" automáticas de bombonas aleatórias (0 desliga). */
-const AUTO_VENDA_MIN = Number(process.env.SIM_AUTO_VENDA_MIN) || 0;
+/**
+ * Chance de uma venda clandestina sorteada a cada dia simulado (no total, não por bombona). Na vida real elas são
+ * frequentes; a demonstração as deixa raras para não poluir a tela.
+ */
+const VENDAS_POR_DIA = numeroDoAmbiente('SIM_VENDAS_POR_DIA', 0.4);
 
 const aparelhos = new Map<string, Aparelho>();
-let silencioMs = 70_000;
+/** Prazo de "sem sinal" do servidor (/configuracao); o silêncio do cenário depende dele e da velocidade atual. */
+let semSinalSegundos = 45;
+let patio: Ponto = { lat: -23.66, lng: -52.6 };
+/** Último estado dos dispositivos vindo do servidor (na ordem dos códigos). */
+let dispositivos: DispositivoRemoto[] = [];
+/** Data de operação vista no ciclo anterior: a venda do dia é sorteada quando ela muda. */
+let dataVista: string | undefined;
+let frota: ReturnType<typeof criarFrota>;
+/** Rodada vista no ciclo anterior: um reset da simulação a muda e o simulador recomeça do zero. */
+let rodadaAtual: number | undefined;
+/** Instante do ciclo anterior: o tempo real decorrido (vezes a velocidade) consome o silêncio. */
+let ultimoTickEm = Date.now();
 
 // ---------- geometria ----------
 
@@ -95,18 +136,10 @@ function seguir(ap: Aparelho, pontos: Ponto[], passo: number) {
 async function buscarEstado() {
   const r = await fetch(`${API}/simulacao/estado`, { headers: { Authorization: `Bearer ${TOKEN_SIMULADOR}` } });
   if (!r.ok) throw new Error(`estado: HTTP ${r.status}`);
-  return (await r.json()) as { dispositivos: DispositivoRemoto[]; comandos: Comando[] };
+  return (await r.json()) as Estado;
 }
 
-async function consultarRota(de: Ponto, para: Ponto) {
-  const url = `${ROTEADOR}/route/v1/driving/${de.lng},${de.lat};${para.lng},${para.lat}?overview=full&geometries=geojson`;
-  const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const corpo = (await r.json()) as { routes?: { distance: number; geometry: { coordinates: [number, number][] } }[] };
-  const rota = corpo.routes?.[0];
-  if (!rota?.geometry.coordinates.length) throw new Error('nenhuma rota encontrada');
-  return { pontos: rota.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })), distanciaM: rota.distance };
-}
+const consultarRota = (de: Ponto, para: Ponto) => consultarOsrm(ROTEADOR, [de, para]);
 
 /** Caminho pelas ruas de `de` até `para`. Termina no próprio alvo, que pode ficar fora da rua. */
 async function buscarRota(de: Ponto, para: Ponto): Promise<Ponto[]> {
@@ -137,7 +170,10 @@ async function buscarRotaDeVenda(de: Ponto): Promise<Ponto[]> {
 
 /** A viagem que a bombona deveria estar fazendo agora, se houver. */
 function viagemAtual(ap: Aparelho): Viagem | null {
-  const { status, alvo } = ap.remoto;
+  const { status, alvo, roteiroId } = ap.remoto;
+  // No furgão de um roteiro: não tem viagem própria, vai aonde o furgão for.
+  if (roteiroId !== null || ap.arrancada) return null;
+  // Em rota sem roteiro: extraviada recuperada, levada ao pátio sozinha.
   if (status === 'EM_ROTA' && alvo) {
     return { chave: `furgao:${alvo.lat},${alvo.lng}`, doFurgao: true, nome: alvo.nome, passo: PASSO_FURGAO_M, buscar: () => buscarRota(ap.posicao, alvo) };
   }
@@ -175,16 +211,17 @@ async function planejarViagem(ap: Aparelho, viagem: Viagem) {
 }
 
 /** Exatamente o que um rastreador real enviaria (docs/contrato-dispositivo.md). */
-async function enviarLeitura(ap: Aparelho, emMovimento: boolean) {
+async function enviarLeitura(ap: Aparelho, emMovimento: boolean, rodada: number) {
   // Sem ruído de GPS: leituras frequentes fariam o pino tremer e a trilha sair da rua.
   const { lat, lng } = ap.posicao;
   const precisao = emMovimento ? 15 : 6 + Math.random() * 6;
   const r = await fetch(`${API}/telemetria`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ap.remoto.token}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ap.remoto.token}`, 'X-Rodada': String(rodada) },
     body: JSON.stringify({ lat, lng, precisao: Math.round(precisao), bateria: Math.round(ap.bateria * 10) / 10, registradoEm: new Date().toISOString() }),
   });
-  if (r.status !== 202) console.warn(`[${ap.remoto.bombona}] leitura recusada: HTTP ${r.status} ${await r.text()}`);
+  // 409: pedido de uma rodada que já acabou (a simulação foi reiniciada); não há o que reclamar.
+  if (r.status !== 202 && r.status !== 409) console.warn(`[${ap.remoto.bombona}] leitura recusada: HTTP ${r.status} ${await r.text()}`);
 }
 
 // ---------- cenários ----------
@@ -205,20 +242,49 @@ function aplicarComando(c: Comando) {
       console.log(`[${c.bombona}] cenário DEVOLUÇÃO: voltando para ${ap.remoto.alvo?.nome ?? 'o local esperado'}`);
       break;
     case 'SEM_SINAL':
-      ap.caladoAte = Date.now() + silencioMs;
+      const silencioMs = silencioDoCenarioMs(semSinalSegundos);
+      ap.caladoMs = silencioMs;
       console.log(`[${c.bombona}] cenário SEM SINAL: rastreador calado por ${Math.round(silencioMs / 1000)} s`);
       break;
     case 'BATERIA_FRACA':
       ap.bateria = 14;
       console.log(`[${c.bombona}] cenário BATERIA FRACA: 14%`);
       break;
+    case 'VENDA_SILENCIOSA':
+      ap.arrancada = true;
+      ap.desvio = false;
+      ap.devolvendo = false;
+      ap.rota = undefined;
+      console.log(`[${c.bombona}] cenário VENDA COM RASTREADOR ARRANCADO: a bombona sumiu e o rastreador parou de mandar leituras`);
+      break;
   }
 }
 
+/** Venda do dia: uma bombona qualquer parada em cliente, fora de furgão. */
 function sortearVenda() {
-  const candidatas = [...aparelhos.values()].filter((a) => a.remoto.status === 'EM_CLIENTE' && !a.desvio);
+  const candidatas = [...aparelhos.values()].filter(
+    (a) => a.remoto.status === 'EM_CLIENTE' && a.remoto.roteiroId === null && !a.desvio && !a.devolvendo && !a.arrancada,
+  );
   const escolhida = candidatas[Math.floor(Math.random() * candidatas.length)];
   if (escolhida) aplicarComando({ id: 0, bombona: escolhida.remoto.bombona, tipo: 'VENDA' });
+}
+
+/** O dia simulado mudou: com chance VENDAS_POR_DIA, uma venda clandestina. Pausado, não há sorteio. */
+function vendasDoDia(data: string, pausado: boolean) {
+  const virou = dataVista !== undefined && data !== dataVista;
+  dataVista = data;
+  if (virou && !pausado && Math.random() < VENDAS_POR_DIA) sortearVenda();
+}
+
+/**
+ * Se o furgão encontra a bombona no cliente: ela está lá de fato, isto é, em cliente no servidor e não vendida (com
+ * ou sem o rastreador). Quais procurar vem do servidor (as `procuradas` de cada parada).
+ */
+function estaNoCliente(codigo: string) {
+  const d = dispositivos.find((x) => x.bombona === codigo);
+  if (!d || d.status !== 'EM_CLIENTE') return false;
+  const ap = aparelhos.get(d.dispositivoId);
+  return !ap?.desvio && !ap?.arrancada;
 }
 
 // ---------- ciclo ----------
@@ -231,14 +297,22 @@ function sincronizar(remotos: DispositivoRemoto[]) {
         remoto,
         posicao: remoto.posicao ?? remoto.alvo ?? { lat: -23.66, lng: -52.6 },
         bateria: remoto.bateria ?? 100,
+        // Simulador reiniciado: a venda com rastreador arrancado continua valendo (senão a bombona "voltaria").
+        arrancada: remoto.arrancada,
         ticksParado: Math.floor(Math.random() * TICKS_ENTRE_SINAIS_PARADA),
       });
       continue;
     }
-    // Coletada pelo furgão: quem estava com a bombona perdeu ela.
+    // Coletada pelo furgão (ou recuperada): quem estava com a bombona perdeu ela; a recuperada ganha rastreador novo.
     if (remoto.status === 'EM_ROTA' && ap.remoto.status !== 'EM_ROTA') {
       ap.desvio = false;
       ap.devolvendo = false;
+      ap.arrancada = false;
+    }
+    // Saiu do furgão (deixada no cliente ou descarregada no pátio): fica no lugar esperado, fora da rua.
+    if (ap.remoto.roteiroId !== null && remoto.roteiroId === null && remoto.alvo) {
+      ap.posicao = { lat: remoto.alvo.lat, lng: remoto.alvo.lng };
+      ap.rota = undefined;
     }
     // Chegou ao pátio: o rastreador é recarregado e já avisa a nova bateria na próxima leitura.
     if (remoto.status === 'PATIO' && ap.remoto.status !== 'PATIO') {
@@ -251,43 +325,98 @@ function sincronizar(remotos: DispositivoRemoto[]) {
 }
 
 /** Anda pela rota da viagem. Sem viagem, termina o caminho: a chegada é confirmada na borda da cerca, antes do alvo. */
-function mover(ap: Aparelho, viagem: Viagem | null) {
+function mover(ap: Aparelho, viagem: Viagem | null, velocidade: number) {
   const rota = ap.rota;
   if (!rota) return false;
   const emViagem = viagem?.chave === rota.chave;
   if (!emViagem && viagem) return false;
   const andando = rota.pontos.length > 0;
-  if (seguir(ap, rota.pontos, rota.passo)) {
+  if (seguir(ap, rota.pontos, rota.passo * velocidade)) {
     if (emViagem && ap.devolvendo) ap.devolvendo = false;
     if (!viagem) ap.rota = undefined;
   }
   return andando;
 }
 
+/** Frota nova, com a rodada de agora nos cabeçalhos (a frota velha, se ainda tiver envios no ar, fica com a dela). */
+function novaFrota() {
+  const rodada = rodadaAtual;
+  return criarFrota({
+    api: API,
+    token: TOKEN_SIMULADOR,
+    roteador: ROTEADOR,
+    patio,
+    tempo: { duracaoS: DURACAO_ROTEIRO_S, pausaMs: PAUSA_PARADA_MS, tickMs: TICK_MS },
+    passoBaseM: PASSO_FURGAO_M,
+    passoRealM: passoPorKmh(VELOCIDADE_REAL_KMH, TICK_MS),
+    esperaEntreTentativasMs: ESPERA_ENTRE_TENTATIVAS_MS,
+    estaNoCliente,
+    cabecalhos: (): Record<string, string> => (rodada === undefined ? {} : { 'X-Rodada': String(rodada) }),
+  });
+}
+
 async function tick() {
-  const { dispositivos, comandos } = await buscarEstado();
+  const estado = await buscarEstado();
+  const { operacao, roteiros, comandos } = estado;
+  const { pausado, velocidade, rodada } = operacao;
+  // Servidor antigo sem o campo: tempo real, o padrão.
+  const modo: Modo = operacao.modo ?? 'REAL';
+  const decorridoMs = Date.now() - ultimoTickEm;
+  ultimoTickEm = Date.now();
+  // Reset: o servidor semeou tudo de novo (tokens e ids novos). Recomeça como se tivesse acabado de subir, antes de
+  // sincronizar; envios velhos ainda no ar só mexem em objetos descartados.
+  if (rodadaMudou(rodadaAtual, rodada)) {
+    console.log(`Simulação reiniciada (rodada ${rodada}): recomeçando`);
+    aparelhos.clear();
+    dispositivos = [];
+    dataVista = undefined;
+  }
+  if (rodadaAtual !== rodada) {
+    rodadaAtual = rodada;
+    frota = novaFrota();
+  }
+  dispositivos = estado.dispositivos;
   sincronizar(dispositivos);
   comandos.forEach(aplicarComando);
+  vendasDoDia(operacao.data, pausado);
 
-  const envios: Promise<void>[] = [];
+  // Pausado: ninguém se move (furgão, venda, devolução); os parados continuam mandando a última posição.
+  const envios = frota.ciclo(roteiros, pausado, velocidade, modo);
   for (const ap of aparelhos.values()) {
+    // Rastreador arrancado: nunca mais manda leitura.
+    if (ap.arrancada) continue;
     const viagem = viagemAtual(ap);
     if (viagem) void planejarViagem(ap, viagem);
     else ap.planejando = undefined;
 
-    if (ap.caladoAte && ap.caladoAte > Date.now()) continue;
-    if (ap.caladoAte) {
-      ap.caladoAte = undefined;
+    // Rastreador calado: a bombona continua andando (uma venda com o sinal cortado leva ela embora de verdade); só
+    // a leitura não sai.
+    // O silêncio conta em tempo simulado, como o prazo do servidor: congela pausado e corre dobrado em 2x.
+    ap.caladoMs = consumirSilencio(ap.caladoMs, pausado, velocidade, decorridoMs);
+    const calado = ap.caladoMs !== undefined && ap.caladoMs > 0;
+    if (ap.caladoMs !== undefined && !calado) {
+      ap.caladoMs = undefined;
       console.log(`[${ap.remoto.bombona}] sinal de volta`);
     }
 
-    const emMovimento = mover(ap, viagem);
-    ap.bateria = Math.max(0, ap.bateria - (emMovimento ? CONSUMO_MOVIMENTO : CONSUMO_PARADA));
+    let emMovimento = false;
+    if (ap.remoto.roteiroId !== null) {
+      // No furgão: a posição é a dele.
+      const furgao = frota.posicao(ap.remoto.roteiroId);
+      if (furgao) {
+        ap.posicao = furgao.posicao;
+        emMovimento = furgao.emMovimento;
+      }
+    } else if (!pausado) {
+      emMovimento = mover(ap, viagem, velocidade);
+    }
+    ap.bateria = Math.max(0, ap.bateria - consumoDeBateria(emMovimento, pausado, velocidade, TICK_MS, modo));
     // A leitura repetida logo ao parar marca o fim do percurso, mesmo que a bombona saia de novo em menos de 1 s.
     const acabouDeParar = !emMovimento && ap.ticksParado === 0;
     ap.ticksParado = emMovimento ? 0 : ap.ticksParado + 1;
+    if (calado) continue;
     if (emMovimento || acabouDeParar || ap.ticksParado % TICKS_ENTRE_SINAIS_PARADA === 0) {
-      envios.push(enviarLeitura(ap, emMovimento).catch((e) => console.warn(`[${ap.remoto.bombona}] falha no envio: ${e.message}`)));
+      envios.push(enviarLeitura(ap, emMovimento, rodada).catch((e) => console.warn(`[${ap.remoto.bombona}] falha no envio: ${e.message}`)));
     }
   }
   await Promise.all(envios);
@@ -296,8 +425,10 @@ async function tick() {
 async function aguardarApi() {
   for (let tentativa = 1; ; tentativa++) {
     try {
-      const config = (await (await fetch(`${API}/configuracao`)).json()) as { semSinalSegundos: number };
-      silencioMs = (config.semSinalSegundos + 25) * 1000;
+      const config = (await (await fetch(`${API}/configuracao`)).json()) as { semSinalSegundos: number; patio: Ponto };
+      semSinalSegundos = config.semSinalSegundos;
+      patio = { lat: config.patio.lat, lng: config.patio.lng };
+      frota = novaFrota();
       return;
     } catch {
       if (tentativa === 1) console.log(`Aguardando a API em ${API}...`);
@@ -310,10 +441,10 @@ async function principal() {
   await aguardarApi();
   await tick();
   console.log(`Simulando ${aparelhos.size} rastreadores (ciclo de ${TICK_MS / 1000} s).`);
-  if (AUTO_VENDA_MIN > 0) {
-    console.log(`Vendas automáticas a cada ${AUTO_VENDA_MIN} min.`);
-    setInterval(sortearVenda, AUTO_VENDA_MIN * 60_000);
-  }
+  console.log(
+    `Furgões: ${VELOCIDADE_REAL_KMH} km/h em tempo real, roteiro em ~${DURACAO_ROTEIRO_S} s em demonstração; ` +
+      `${PAUSA_PARADA_MS} ms por parada. Vendas sorteadas: ${VENDAS_POR_DIA} por dia.`,
+  );
 
   let rodando = false;
   setInterval(async () => {

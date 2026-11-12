@@ -30,14 +30,54 @@ const CLIENTES = [
   { nome: 'Lanchonete Esquina do Sabor', tipo: 'Lanchonete', cidade: 'Rondon', endereco: 'Rua Pernambuco, 205', lat: -23.411, lng: -52.765 },
   { nome: 'Cozinha Industrial Oeste', tipo: 'Cozinha industrial', cidade: 'Cascavel', endereco: 'Av. Brasil, 5200', lat: -24.9555, lng: -53.4552 },
   { nome: 'Churrascaria Boi Gordo', tipo: 'Churrascaria', cidade: 'Cascavel', endereco: 'Rua Paraná, 1700', lat: -24.9508, lng: -53.4605 },
+  // Clientes 26 a 50 (contratos de coleta): pontos nas ruas, ajustados ao roteador (OSRM `nearest`). O 50 fica sem contrato nem bombona.
+  { nome: 'Restaurante Sabor do Vale', tipo: 'Restaurante', cidade: 'Cianorte', endereco: 'Av. Maranhão, 640', lat: -23.66131, lng: -52.6067 },
+  { nome: 'Pastelaria Massa Crocante', tipo: 'Pastelaria', cidade: 'Cianorte', endereco: 'Rua Abolição, 310', lat: -23.65874, lng: -52.60409 },
+  { nome: 'Lanchonete Chapa Quente', tipo: 'Lanchonete', cidade: 'Cianorte', endereco: 'Av. Paraná, 1450', lat: -23.65876, lng: -52.61003 },
+  { nome: 'Hotel Ipê Amarelo', tipo: 'Hotel', cidade: 'Cianorte', endereco: 'Rua XV de Novembro, 520', lat: -23.65433, lng: -52.60292 },
+  { nome: 'Churrascaria Brasa Norte', tipo: 'Churrascaria', cidade: 'Cianorte', endereco: 'Av. Brasil, 2780', lat: -23.65339, lng: -52.61211 },
+  { nome: 'Padaria Doce Manhã', tipo: 'Padaria', cidade: 'Cianorte', endereco: 'Av. Amazonas, 905', lat: -23.66399, lng: -52.60221 },
+  { nome: 'Cozinha Industrial Prato Cheio', tipo: 'Cozinha industrial', cidade: 'Cianorte', endereco: 'Rua Curitiba, 1800', lat: -23.65063, lng: -52.60713 },
+  { nome: 'Lanchonete Casa do Pastel', tipo: 'Lanchonete', cidade: 'Tapejara', endereco: 'Rua Duque de Caxias, 210', lat: -23.7317, lng: -52.87058 },
+  { nome: 'Restaurante Sabor Caseiro', tipo: 'Restaurante', cidade: 'São Tomé', endereco: 'Rua Voluntários da Pátria, 180', lat: -23.53465, lng: -52.58773 },
+  { nome: 'Pizzaria Quatro Estações', tipo: 'Pizzaria', cidade: 'Japurá', endereco: 'Av. Bolívar, 420', lat: -23.47054, lng: -52.55578 },
+  { nome: 'Pastelaria Ponto do Sabor', tipo: 'Pastelaria', cidade: 'Jussara', endereco: 'Rua Ipiranga, 260', lat: -23.62159, lng: -52.47104 },
+  { nome: 'Churrascaria Lenha Nobre', tipo: 'Churrascaria', cidade: 'Indianópolis', endereco: 'Av. Tupinambás, 350', lat: -23.4791, lng: -52.69856 },
+  { nome: 'Lanchonete Boa Vista', tipo: 'Lanchonete', cidade: 'Tuneiras do Oeste', endereco: 'Rua Pernambuco, 145', lat: -23.86972, lng: -52.87897 },
+  { nome: 'Restaurante Mesa Posta', tipo: 'Restaurante', cidade: 'Umuarama', endereco: 'Rua Tupi, 1020', lat: -23.76597, lng: -53.32792 },
+  { nome: 'Hotel Estrela do Noroeste', tipo: 'Hotel', cidade: 'Umuarama', endereco: 'Av. Roberto Silveira, 780', lat: -23.76329, lng: -53.32497 },
+  { nome: 'Pizzaria Massa Leve', tipo: 'Pizzaria', cidade: 'Maringá', endereco: 'Av. Mauá, 1240', lat: -23.42002, lng: -51.93006 },
+  { nome: 'Cozinha Industrial Sabor Norte', tipo: 'Cozinha industrial', cidade: 'Maringá', endereco: 'Rua Joubert de Carvalho, 900', lat: -23.41993, lng: -51.93594 },
+  { nome: 'Lanchonete Ponto Final', tipo: 'Lanchonete', cidade: 'Campo Mourão', endereco: 'Av. Jorge Walter, 640', lat: -24.04058, lng: -52.38792 },
+  { nome: 'Restaurante Panela de Barro', tipo: 'Restaurante', cidade: 'Paranavaí', endereco: 'Rua Piauí, 530', lat: -23.07299, lng: -52.46792 },
+  { nome: 'Padaria Pão de Ouro', tipo: 'Padaria', cidade: 'Cruzeiro do Oeste', endereco: 'Av. Clotilde Proma, 400', lat: -23.78498, lng: -53.07012 },
+  { nome: 'Pastelaria Dois Irmãos', tipo: 'Pastelaria', cidade: 'Goioerê', endereco: 'Rua José Bonifácio, 275', lat: -24.18227, lng: -53.02508 },
+  { nome: 'Restaurante Panela Cheia', tipo: 'Restaurante', cidade: 'Cidade Gaúcha', endereco: 'Alameda Brasil, 150', lat: -23.38076, lng: -52.94405 },
+  { nome: 'Lanchonete Esquina Doce', tipo: 'Lanchonete', cidade: 'Rondon', endereco: 'Rua Amazonas, 330', lat: -23.41115, lng: -52.76178 },
+  { nome: 'Churrascaria Estância Oeste', tipo: 'Churrascaria', cidade: 'Cascavel', endereco: 'Rua Duque de Caxias, 1120', lat: -24.9582, lng: -53.45523 },
+  { nome: 'Restaurante Cantinho da Praça', tipo: 'Restaurante', cidade: 'Cianorte', endereco: 'Rua Juiz de Fora, 95', lat: -23.65875, lng: -52.59815 },
 ];
 
 // Índice (base 1) do cliente de cada bombona alocada.
 const ALOCACOES = [1, 1, 2, 3, 4, 5, 5, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 // Uma bombona para cada cliente da escala real (clientes 15 a 25).
 const ALOCACOES_REGIAO = [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
-const NO_PATIO = 5;
-const EM_ROTA_PARA = [3, 7];
+// Inclui BO-0023 e BO-0024, que na primeira versão nasciam "em rota" sem furgão (entrega manual): na versão com
+// roteiros a bombona só viaja dentro do furgão, então elas começam no pátio.
+const NO_PATIO = 7;
+// Bombonas novas (BO-0036 em diante) dos clientes 26 a 49; o 50 não tem nenhuma.
+const BOMBONAS_NOVAS = [2, 1, 2, 1, 3, 1, 2, 1, 2, 1, 1, 2, 1, 1, 2, 1, 3, 1, 2, 1, 1, 2, 1, 1];
+const NO_PATIO_EXTRA = 30;
+// Vazias de 200 L no pátio, para a troca do cliente de 200 L (o carregamento prefere a capacidade que ele usa).
+const NO_PATIO_200L = 6;
+const INICIO_CONTRATOS = '2026-11-02';
+// Contrato dos clientes 1 a 49, na ordem: D = diária; S + dias (1 = segunda … 6 = sábado); Q + dia; M + dia do mês.
+const CONTRATOS = [
+  'D', 'D', 'D', 'S1', 'S24', 'D', 'S36', 'S2', 'M9', 'Q3', 'M12', 'S5', 'S5', 'M16',
+  'S4', 'M20', 'Q5', 'M21', 'S6', 'Q2', 'S15', 'S24', 'Q4', 'S36', 'S12',
+  'D', 'D', 'S135', 'S1', 'S246', 'D', 'S36', 'S4', 'M19', 'Q1', 'M11', 'S5', 'S2', 'Q6',
+  'M9', 'Q4', 'M12', 'M17', 'S3', 'M20', 'S6', 'M21', 'S25', 'S3',
+];
 
 // Incidentes antigos para o ranking de risco (RN14).
 const INCIDENTES = [
@@ -94,18 +134,16 @@ export function popularSeVazio(db: Banco, config: Config): boolean {
     const plano = [
       ...ALOCACOES.map((cliente) => ({ status: 'EM_CLIENTE', cliente })),
       ...Array.from({ length: NO_PATIO }, () => ({ status: 'PATIO', cliente: null })),
-      ...EM_ROTA_PARA.map((cliente) => ({ status: 'EM_ROTA', cliente })),
       ...ALOCACOES_REGIAO.map((cliente) => ({ status: 'EM_CLIENTE', cliente })),
     ];
 
-    plano.forEach((item, i) => {
+    const inserirBombona = (item: { status: string; cliente: number | null; capacidade?: number }, i: number) => {
       const codigo = `BO-${String(i + 1).padStart(4, '0')}`;
       const dispositivo = `DEV-${String(i + 1).padStart(4, '0')}`;
       const cliente = item.cliente ? CLIENTES[item.cliente - 1] : null;
-      const capacidade = cliente?.tipo === 'Indústria de alimentos' ? 200 : 50;
-      // Bombona em rota acabou de sair do pátio.
+      const capacidade = item.capacidade ?? (cliente?.tipo === 'Indústria de alimentos' ? 200 : 50);
       const base = item.status === 'EM_CLIENTE' && cliente ? cliente : config.patio;
-      const pos = perto(base.lat, base.lng, item.status === 'EM_ROTA' ? 400 : 25);
+      const pos = perto(base.lat, base.lng, 25);
       // Uma bombona começa com a bateria no limite, para mostrar o alerta logo de cara.
       const bateria = i === 6 ? 21 : Math.round(45 + rnd() * 55);
 
@@ -116,17 +154,15 @@ export function popularSeVazio(db: Banco, config: Config): boolean {
       if (item.status === 'EM_CLIENTE') {
         insMov.run(bombonaId, 'SAIDA_PARA_ENTREGA', item.cliente, null, diasAtras(3 + (i % 9) + 0.1));
         insMov.run(bombonaId, 'ENTREGA_CONCLUIDA', item.cliente, null, diasAtras(3 + (i % 9)));
-      } else if (item.status === 'EM_ROTA') {
-        insMov.run(bombonaId, 'SAIDA_PARA_ENTREGA', item.cliente, null, agora);
       }
-    });
+    };
+    plano.forEach(inserirBombona);
 
     // Histórico de coletas: de 3 a 6 por cliente, uma por semana, começando 15 dias atrás.
     // Litros em torno de uma média de 55% a 85% da capacidade, com ±15%; nunca acima da capacidade
     // nem abaixo de 50% da média (o seed não pode disparar a RN18).
     const capacidadeDe = db.prepare('SELECT id, capacidade_l FROM bombonas WHERE cliente_id = ? AND status = ? ORDER BY id LIMIT 1');
-    CLIENTES.forEach((_, idx) => {
-      const k = idx + 1;
+    const historico = (k: number) => {
       const bombona = capacidadeDe.get(k, 'EM_CLIENTE') as { id: number; capacidade_l: number } | undefined;
       if (!bombona) return;
       const media = bombona.capacidade_l * (0.55 + 0.3 * rnd());
@@ -134,6 +170,31 @@ export function popularSeVazio(db: Banco, config: Config): boolean {
         const litros = Math.min(bombona.capacidade_l, Math.max(1, Math.round(media * (0.85 + 0.3 * rnd()))));
         insColeta.run(bombona.id, k, litros, diasAtras(15 + 7 * n));
       }
+    };
+    for (let k = 1; k <= 25; k++) historico(k);
+
+    // Tudo que veio com os contratos de coleta entra depois, para os valores sorteados acima não mudarem:
+    // bombonas dos clientes 26 a 49 (com o mesmo padrão de histórico de litros) e o estoque extra do pátio (RN24).
+    const novas = [
+      ...BOMBONAS_NOVAS.flatMap((qtd, j) => Array.from({ length: qtd }, () => ({ status: 'EM_CLIENTE', cliente: 26 + j }))),
+      ...Array.from({ length: NO_PATIO_EXTRA }, () => ({ status: 'PATIO', cliente: null })),
+    ];
+    novas.forEach((item, j) => inserirBombona(item, plano.length + j));
+    for (let k = 26; k <= 25 + BOMBONAS_NOVAS.length; k++) historico(k);
+
+    // Um contrato ativo para os clientes 1 a 49, com a quantidade igual às bombonas que o cliente tem (ou recebe).
+    const insContrato = db.prepare(
+      `INSERT INTO contratos (cliente_id, quantidade, frequencia, dias_semana, dia_mes, inicio, situacao, criado_em, atualizado_em)
+       VALUES (?, ?, ?, ?, ?, ?, 'ATIVO', ?, ?)`,
+    );
+    const qtdDe = db.prepare('SELECT COUNT(*) AS n FROM bombonas WHERE cliente_id = ?');
+    CONTRATOS.forEach((regra, j) => {
+      const k = j + 1;
+      const { n } = qtdDe.get(k) as { n: number };
+      const dado = Number(regra.slice(1));
+      const frequencia = ({ D: 'DIARIA', S: 'SEMANAL', Q: 'QUINZENAL', M: 'MENSAL' } as Record<string, string>)[regra[0]];
+      const dias = regra[0] === 'S' ? regra.slice(1).split('').join(',') : regra[0] === 'Q' ? String(dado) : '';
+      insContrato.run(k, n, frequencia, dias, regra[0] === 'M' ? dado : null, INICIO_CONTRATOS, agora, agora);
     });
 
     const insAlerta = db.prepare(`
@@ -149,6 +210,10 @@ export function popularSeVazio(db: Banco, config: Config): boolean {
         insAlerta.run(bombonaId, inc.cliente, 'EXTRAVIO', 'CRITICO', 'Bombona a mais de 2 km do local esperado', aberto, resolvido, inc.resolucao);
       }
     }
+
+    // As vazias de 200 L entram por último, depois de todos os sorteios acima, para eles não mudarem.
+    const jaInseridas = plano.length + novas.length;
+    for (let j = 0; j < NO_PATIO_200L; j++) inserirBombona({ status: 'PATIO', cliente: null, capacidade: 200 }, jaInseridas + j);
   });
   return true;
 }

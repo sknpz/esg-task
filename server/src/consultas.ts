@@ -15,6 +15,8 @@ export type LinhaBombona = {
   dispositivo_id: string;
   leituras_fora: number;
   atualizado_em: string;
+  /** Furgão em que viaja (NULL fora de furgão). */
+  roteiro_id: number | null;
   bateria: number | null;
   ultimo_sinal: string | null;
   lat: number | null;
@@ -85,6 +87,7 @@ export function paraDto(b: LinhaBombona, config: Config) {
     status: b.status,
     cliente: b.cliente_id === null ? null : { id: b.cliente_id, nome: b.cliente_nome!, cidade: b.cliente_cidade! },
     dispositivoId: b.dispositivo_id,
+    roteiroId: b.roteiro_id,
     posicao,
     bateria: b.bateria,
     ultimoSinal: b.ultimo_sinal,
@@ -153,19 +156,69 @@ export function trilha(db: Banco, bombonaId: number, limite = 200) {
   return percurso.map(({ parou: _parou, ...ponto }) => ponto).reverse();
 }
 
+export type Procurada = { id: number; codigo: string; capacidade_l: number; status: 'EM_CLIENTE' | 'EXTRAVIADA' };
+
+/**
+ * Condição SQL (sobre a bombona `b`): uma parada já registrou o sumiço dela, isto é, há NAO_ENCONTRADA nesse cliente
+ * desde a última vez que ela foi deixada lá.
+ */
+const SUMICO_REGISTRADO_NA_PARADA = `EXISTS (
+  SELECT 1 FROM movimentacoes m
+  WHERE m.bombona_id = b.id AND m.cliente_id = b.cliente_id AND m.tipo = 'NAO_ENCONTRADA'
+    AND m.criado_em >= COALESCE((SELECT MAX(e.criado_em) FROM movimentacoes e
+                                 WHERE e.bombona_id = b.id AND e.cliente_id = b.cliente_id AND e.tipo = 'ENTREGA_CONCLUIDA'), ''))`;
+
+/** Extraviada cujo sumiço uma parada já registrou (ver `SUMICO_REGISTRADO_NA_PARADA`): já contou no risco do cliente. */
+export function sumicoRegistradoNaParada(db: Banco, bombonaId: number): boolean {
+  const linha = db
+    .prepare(`SELECT 1 FROM bombonas b WHERE b.id = ? AND b.status = 'EXTRAVIADA' AND ${SUMICO_REGISTRADO_NA_PARADA}`)
+    .get(bombonaId);
+  return linha !== undefined;
+}
+
+/**
+ * RN21/RN22: as bombonas do cliente que a troca procura na parada. São as dele fora de furgão, paradas lá ou
+ * extraviadas, menos a extraviada cujo sumiço uma parada já registrou (NAO_ENCONTRADA nesse cliente desde a
+ * última vez que ela foi deixada lá): essa não é procurada de novo. A mesma definição vale para o planejamento
+ * (demanda e retirada) e para o simulador. Prepara a consulta uma vez; devolve a função por cliente.
+ */
+export function bombonasProcuradas(db: Banco) {
+  const consulta = db.prepare(
+    `SELECT b.id, b.codigo, b.capacidade_l, b.status FROM bombonas b
+     WHERE b.cliente_id = ? AND b.roteiro_id IS NULL
+       AND (b.status = 'EM_CLIENTE' OR (b.status = 'EXTRAVIADA' AND NOT ${SUMICO_REGISTRADO_NA_PARADA}))
+     ORDER BY b.codigo`,
+  );
+  return (clienteId: number) => consulta.all(clienteId) as Procurada[];
+}
+
 export const nivelRisco = (incidentes: number) => (incidentes >= 3 ? 'ALTO' : incidentes >= 1 ? 'MEDIO' : 'BAIXO');
+
+/**
+ * RN14 e RN22: incidentes de cada cliente. Saída da cerca (sem contar a reaberta na mesma saída) e bombona não
+ * encontrada na parada sem o rastreador ter visto o sumiço.
+ */
+const INCIDENTES = `
+  incidentes AS (
+    SELECT cliente_id, aberto_em AS em FROM alertas WHERE tipo = 'FORA_DA_AREA' AND reaberto = 0
+    UNION ALL
+    SELECT cliente_id, criado_em AS em FROM movimentacoes WHERE tipo = 'NAO_ENCONTRADA' AND incidente = 1
+  )`;
 
 export function listarClientes(db: Banco) {
   const linhas = db
     .prepare(
-      `SELECT c.id, c.nome, c.tipo, c.cidade, c.endereco, c.lat, c.lng, c.raio_m AS raioM,
+      `WITH ${INCIDENTES}
+       SELECT c.id, c.nome, c.tipo, c.cidade, c.endereco, c.lat, c.lng, c.raio_m AS raioM,
               (SELECT COUNT(*) FROM bombonas b WHERE b.cliente_id = c.id AND b.status IN ('EM_CLIENTE', 'EXTRAVIADA')) AS bombonas,
-              (SELECT COUNT(*) FROM alertas a WHERE a.cliente_id = c.id AND a.tipo = 'FORA_DA_AREA' AND a.reaberto = 0) AS incidentes,
-              (SELECT MAX(a.aberto_em) FROM alertas a WHERE a.cliente_id = c.id AND a.tipo = 'FORA_DA_AREA' AND a.reaberto = 0) AS ultimoIncidente
+              (SELECT COUNT(*) FROM incidentes i WHERE i.cliente_id = c.id) AS incidentes,
+              (SELECT MAX(i.em) FROM incidentes i WHERE i.cliente_id = c.id) AS ultimoIncidente,
+              EXISTS (SELECT 1 FROM contratos k WHERE k.cliente_id = c.id AND k.situacao = 'ATIVO') AS contratoAtivo,
+              (SELECT k.frequencia FROM contratos k WHERE k.cliente_id = c.id AND k.situacao = 'ATIVO') AS modalidade
        FROM clientes c ORDER BY incidentes DESC, c.nome`,
     )
-    .all() as Array<{ incidentes: number }>;
-  return linhas.map((c) => ({ ...c, risco: nivelRisco(c.incidentes) }));
+    .all() as Array<{ incidentes: number; contratoAtivo: number }>;
+  return linhas.map((c) => ({ ...c, contratoAtivo: c.contratoAtivo === 1, risco: nivelRisco(c.incidentes) }));
 }
 
 export function listarAlertas(db: Banco, filtro: { status?: string; bombonaId?: number; limite?: number } = {}) {

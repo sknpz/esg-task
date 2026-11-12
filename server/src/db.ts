@@ -26,6 +26,19 @@ CREATE TABLE IF NOT EXISTS dispositivos (
   lng           REAL
 );
 
+CREATE TABLE IF NOT EXISTS roteiros (
+  id           INTEGER PRIMARY KEY,
+  data         TEXT    NOT NULL,
+  numero       INTEGER NOT NULL,
+  status       TEXT    NOT NULL CHECK (status IN ('PLANEJADO', 'EM_ANDAMENTO', 'CONCLUIDO')),
+  trajeto      TEXT,
+  distancia_m  REAL,
+  lat          REAL,
+  lng          REAL,
+  iniciado_em  TEXT,
+  concluido_em TEXT
+);
+
 CREATE TABLE IF NOT EXISTS bombonas (
   id             INTEGER PRIMARY KEY,
   codigo         TEXT    NOT NULL UNIQUE,
@@ -35,7 +48,9 @@ CREATE TABLE IF NOT EXISTS bombonas (
   cliente_id     INTEGER REFERENCES clientes (id),
   dispositivo_id TEXT    NOT NULL UNIQUE REFERENCES dispositivos (id),
   leituras_fora  INTEGER NOT NULL DEFAULT 0,
-  atualizado_em  TEXT    NOT NULL
+  atualizado_em  TEXT    NOT NULL,
+  -- Furgão em que a bombona viaja (NULL fora de furgão).
+  roteiro_id     INTEGER REFERENCES roteiros (id)
 );
 
 CREATE TABLE IF NOT EXISTS leituras (
@@ -58,6 +73,7 @@ CREATE TABLE IF NOT EXISTS movimentacoes (
   cliente_id  INTEGER REFERENCES clientes (id),
   observacao  TEXT,
   litros      INTEGER,
+  incidente   INTEGER NOT NULL DEFAULT 0,
   criado_em   TEXT    NOT NULL
 );
 
@@ -82,6 +98,48 @@ CREATE UNIQUE INDEX alertas_um_aberto ON alertas (bombona_id, tipo) WHERE status
 -- RN18: no máximo um aviso de coleta abaixo do esperado aberto por cliente.
 CREATE UNIQUE INDEX IF NOT EXISTS alertas_coleta_abaixo_cliente ON alertas (cliente_id) WHERE status = 'ABERTO' AND tipo = 'COLETA_ABAIXO';
 
+-- RN19: no máximo um contrato ativo por cliente. dias_semana guarda "1,3,5".
+CREATE TABLE IF NOT EXISTS contratos (
+  id                INTEGER PRIMARY KEY,
+  cliente_id        INTEGER NOT NULL REFERENCES clientes (id),
+  quantidade        INTEGER NOT NULL CHECK (quantidade >= 1),
+  frequencia        TEXT    NOT NULL CHECK (frequencia IN ('DIARIA', 'SEMANAL', 'QUINZENAL', 'MENSAL')),
+  dias_semana       TEXT    NOT NULL DEFAULT '',
+  dia_mes           INTEGER,
+  inicio            TEXT    NOT NULL,
+  situacao          TEXT    NOT NULL DEFAULT 'ATIVO' CHECK (situacao IN ('ATIVO', 'ENCERRADO')),
+  retirada_pendente INTEGER NOT NULL DEFAULT 0,
+  criado_em         TEXT    NOT NULL,
+  atualizado_em     TEXT    NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS contratos_um_ativo ON contratos (cliente_id) WHERE situacao = 'ATIVO';
+
+CREATE TABLE IF NOT EXISTS operacao (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  data       TEXT    NOT NULL,
+  fase       TEXT    NOT NULL CHECK (fase IN ('MANHA', 'ROTAS', 'FIM')),
+  fase_desde TEXT    NOT NULL,
+  pausado    INTEGER NOT NULL DEFAULT 0,
+  velocidade INTEGER NOT NULL DEFAULT 1 CHECK (velocidade IN (1, 2)),
+  modo       TEXT    NOT NULL DEFAULT 'REAL' CHECK (modo IN ('REAL', 'DEMO')),
+  rodada     INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS paradas (
+  id          INTEGER PRIMARY KEY,
+  data        TEXT    NOT NULL,
+  roteiro_id  INTEGER REFERENCES roteiros (id),
+  ordem       INTEGER,
+  cliente_id  INTEGER NOT NULL REFERENCES clientes (id),
+  contrato_id INTEGER REFERENCES contratos (id),
+  motivo      TEXT    NOT NULL CHECK (motivo IN ('COLETA', 'RETIRADA')),
+  vazias      INTEGER NOT NULL,
+  demanda     INTEGER NOT NULL,
+  status      TEXT    NOT NULL CHECK (status IN ('PENDENTE', 'FEITA', 'NAO_ATENDIDA')),
+  resultado   TEXT,
+  feita_em    TEXT
+);
+
 -- Canal de controle da demonstração: o painel pede um cenário e o simulador executa.
 CREATE TABLE IF NOT EXISTS simulacao_comandos (
   id            INTEGER PRIMARY KEY,
@@ -93,7 +151,7 @@ CREATE TABLE IF NOT EXISTS simulacao_comandos (
 `;
 
 /** Versão do esquema; um banco mais antigo é descartado e recriado (os dados são de demonstração). */
-export const VERSAO_ESQUEMA = 2;
+export const VERSAO_ESQUEMA = 5;
 
 function descartarSeDesatualizado(caminho: string) {
   if (caminho === ':memory:' || !fs.existsSync(caminho)) return;

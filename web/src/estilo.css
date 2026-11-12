@@ -63,7 +63,7 @@ p {
 
 .app {
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
+  grid-template-rows: auto auto auto auto 1fr;
   height: 100dvh;
 }
 
@@ -1371,6 +1371,46 @@ path.leaflet-interactive:focus {
   font-weight: 600;
 }
 
+.clientes__filtros {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.clientes__busca {
+  max-width: 420px;
+}
+
+.clientes__filtros .filtros {
+  align-items: center;
+  margin-top: 8px;
+}
+
+.clientes__rotulo {
+  min-width: 64px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-suave);
+}
+
+.clientes__contador {
+  margin-top: 8px;
+}
+
+.cabecalho-ordenar {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.cabecalho-ordenar:hover {
+  color: var(--texto);
+}
+
 .resumo-risco .selo:not(:first-child) {
   margin-left: 10px;
 }
@@ -1493,5 +1533,439 @@ path.leaflet-interactive:focus {
 
   .resolver {
     flex-wrap: wrap;
+  }
+}
+
+/* ---------- operação (topo) e contratos ---------- */
+.contratos {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+  gap: 16px;
+  align-items: start;
+}
+
+.contratos:not(:has(.contrato-form)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.linha-clicavel {
+  cursor: pointer;
+}
+
+.linha-clicavel:hover,
+.linha-clicavel--ativa {
+  background: var(--fundo);
+}
+
+.link-linha {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: var(--texto);
+  text-align: left;
+  cursor: pointer;
+}
+
+.encerrados {
+  padding: 8px 12px;
+}
+
+.contrato-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--superficie);
+}
+
+.contrato-form h2 {
+  font-size: 16px;
+}
+
+.contrato-form__campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 13px;
+}
+
+.contrato-form__campo > span,
+.contrato-form__campo > legend {
+  padding: 0;
+  font-weight: 600;
+  color: var(--texto-suave);
+}
+
+.opcoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.cliente-novo {
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+}
+
+.cliente-novo > legend {
+  padding: 0 4px;
+}
+
+.link-acao {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--azul);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.mapa-ponto {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mapa-ponto__mapa {
+  height: 220px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+}
+
+.pino-novo {
+  width: 18px;
+  height: 18px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: var(--verde);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
+}
+
+.contrato-form__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.erro-form {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .contratos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .topo {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 8px 12px;
+  }
+
+  .navegacao {
+    order: 3;
+    width: 100%;
+    height: 40px;
+    overflow-x: auto;
+  }
+
+  .navegacao a {
+    white-space: nowrap;
+  }
+}
+
+/* ---------- Coletas do dia ---------- */
+.coletas {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+.coletas__lateral {
+  width: 360px;
+  min-width: 360px;
+  overflow-y: auto;
+  padding: 14px;
+  background: var(--superficie);
+  border-right: 1px solid var(--borda);
+}
+.coletas__mapa {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+.coletas__mapa .mapa {
+  height: 100%;
+  width: 100%;
+}
+.coletas__titulo {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.coletas__nota,
+.coletas__vazio {
+  font-size: 12px;
+}
+.coletas__furgoes {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.furgao {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  padding: 8px 10px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-left: 5px solid var(--cinza);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.furgao__acompanhar {
+  margin-top: 4px;
+}
+.furgao--selecionado {
+  background: var(--azul-claro);
+}
+.furgao__cidades {
+  color: var(--texto-suave);
+}
+.furgao__linha,
+.furgao__situacao {
+  display: block;
+  font-size: 13px;
+  margin-top: 2px;
+}
+.furgao__situacao {
+  color: var(--texto-suave);
+}
+.coletas__paradas {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--borda);
+}
+.coletas__paradas ol,
+.coletas__paradas ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.parada {
+  display: flex;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+.parada__marca {
+  flex: 0 0 22px;
+  text-align: center;
+  color: var(--texto-suave);
+}
+.parada--feita .parada__marca {
+  color: var(--verde);
+}
+.parada--nao_atendida .parada__marca {
+  color: var(--vermelho);
+}
+.parada__resultado {
+  display: block;
+  color: var(--texto-suave);
+}
+.pino-furgao {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: #fff;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 40%);
+  display: grid;
+  place-items: center;
+}
+.pino-furgao svg {
+  width: 22px;
+  height: 22px;
+}
+.pino-furgao span {
+  position: absolute;
+  right: -4px;
+  top: -6px;
+  background: #18212b;
+  color: #fff;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+.pino-parada {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 40%);
+}
+.pino-parada--feita {
+  background: #9aa5b1;
+}
+@media (max-width: 900px) {
+  .coletas {
+    flex-direction: column-reverse;
+  }
+  .coletas__lateral {
+    width: auto;
+    min-width: 0;
+    max-height: 55%;
+    border-right: 0;
+    border-top: 1px solid var(--borda);
+  }
+  .coletas__mapa {
+    flex: 0 0 40%;
+  }
+}
+.coletas__rotulo {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-suave);
+}
+
+/* ---------- player da simulação (abaixo do topo) ---------- */
+.player {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 20px;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borda);
+  font-size: 13px;
+}
+
+.player__controles {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.player__botao {
+  min-width: 34px;
+  height: 30px;
+}
+
+.player__modos {
+  display: inline-flex;
+}
+
+.player__modo {
+  height: 30px;
+  white-space: nowrap;
+}
+
+.player__modos .player__modo:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.player__modos .player__modo:last-child {
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.player__data {
+  margin-left: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.player__dia {
+  font-weight: 400;
+  color: var(--texto-suave);
+}
+
+.player__andamento {
+  flex: 1;
+  min-width: 0;
+}
+
+.player__trilho {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--cinza-claro);
+  overflow: hidden;
+}
+
+.player__feito {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--verde);
+  transition: width 0.25s linear;
+}
+
+.player__marcas {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--texto-suave);
+}
+
+.player--confirmando {
+  flex-wrap: wrap;
+  background: var(--ambar-claro);
+}
+
+.player__pergunta {
+  flex: 1;
+  min-width: 0;
+}
+
+.player__botoes {
+  display: flex;
+  gap: 8px;
+}
+
+.player__erro {
+  color: #991b1b;
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .player {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 8px 12px;
+  }
+
+  .player__andamento {
+    flex: 1 0 100%;
   }
 }

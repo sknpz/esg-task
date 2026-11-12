@@ -1,5 +1,5 @@
 import { abrirAlerta, resolverAlertasDaBombona, temAlertaAberto } from './alertas.ts';
-import { bombonaDto, destino, linhaBombonaPorId, localEsperado } from './consultas.ts';
+import { bombonaDto, destino, linhaBombonaPorId, localEsperado, sumicoRegistradoNaParada } from './consultas.ts';
 import type { Contexto } from './contexto.ts';
 import { transacao } from './db.ts';
 import { dentroDaCerca, distanciaM } from './geo.ts';
@@ -72,8 +72,9 @@ export function processarLeitura(ctx: Contexto, dispositivoId: string, leitura: 
 
     if (b.status === 'EM_ROTA') {
       // RN13: em rota não há cerca. RN04: chegada ao destino conclui a movimentação.
+      // Dentro de um furgão (roteiro), quem entrega é a troca na parada: passar pela cerca não muda nada.
       const alvo = destino(b, config)!;
-      if (dentroDaCerca(posicao, alvo, alvo.raioM, leitura.precisao)) {
+      if (b.roteiro_id === null && dentroDaCerca(posicao, alvo, alvo.raioM, leitura.precisao)) {
         novoStatus = b.cliente_id === null ? 'PATIO' : 'EM_CLIENTE';
         db.prepare('INSERT INTO movimentacoes (bombona_id, tipo, cliente_id, observacao, criado_em) VALUES (?, ?, ?, ?, ?)').run(
           b.id,
@@ -110,8 +111,9 @@ export function processarLeitura(ctx: Contexto, dispositivoId: string, leitura: 
               severidade: 'AVISO',
               mensagem: `Saiu da cerca de ${esperado.nome} (${Math.round(distancia)} m do ponto)`,
               em,
-              // Passou da leitura de confirmação: é a mesma saída, reaberta após resolução manual (RN15).
-              reaberto: leiturasFora > LEITURAS_PARA_CONFIRMAR,
+              // Passou da leitura de confirmação: é a mesma saída, reaberta após resolução manual (RN15). Sumiço que
+              // uma parada já registrou também não conta de novo (RN22: um sumiço conta uma vez só).
+              reaberto: leiturasFora > LEITURAS_PARA_CONFIRMAR || sumicoRegistradoNaParada(db, b.id),
             }),
           );
           // RN08: longe demais vira extravio.
@@ -152,7 +154,12 @@ export function processarLeitura(ctx: Contexto, dispositivoId: string, leitura: 
 /** RN10: abre SEM_SINAL para dispositivos calados há mais tempo que o limite. */
 export function verificarSemSinal(ctx: Contexto, agora = Date.now()) {
   const { db, config } = ctx;
-  const limite = new Date(agora - config.semSinalSegundos * 1000).toISOString();
+  // Sem operação criada, vale o relógio real (1x, não pausado). Pausada, o tempo não passa; em 2x o prazo encurta.
+  const operacao = db.prepare('SELECT pausado, velocidade FROM operacao WHERE id = 1').get() as
+    | { pausado: number; velocidade: number }
+    | undefined;
+  if (operacao?.pausado === 1) return [];
+  const limite = new Date(agora - (config.semSinalSegundos * 1000) / (operacao?.velocidade ?? 1)).toISOString();
   const caladas = db
     .prepare(
       `SELECT b.id, b.cliente_id, d.ultimo_sinal

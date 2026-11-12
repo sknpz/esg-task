@@ -23,23 +23,26 @@ describe('API de consulta', () => {
   before(async () => (api = await subirApi(ctx)));
   after(() => api.fechar());
 
-  it('lista as 35 bombonas do seed com posição e local esperado', async () => {
+  it('lista as 107 bombonas do seed com posição e local esperado', async () => {
     const bombonas = await (await fetch(`${api.url}/bombonas`)).json();
-    assert.equal(bombonas.length, 35);
+    assert.equal(bombonas.length, 107);
     const emCliente = bombonas.filter((b: any) => b.status === 'EM_CLIENTE');
-    assert.equal(emCliente.length, 28);
+    assert.equal(emCliente.length, 64);
     for (const b of emCliente) {
       assert.ok(b.localEsperado, b.codigo);
       assert.ok(b.distanciaM < 150, `${b.codigo} está a ${b.distanciaM} m`);
     }
-    const emRota = bombonas.filter((b: any) => b.status === 'EM_ROTA');
-    assert.equal(emRota.length, 2);
-    assert.ok(emRota.every((b: any) => b.localEsperado === null && b.destino));
+    // Nenhuma nasce em rota sem furgão (BO-0023 e BO-0024 começam no pátio).
+    assert.equal(bombonas.filter((b: any) => b.status === 'EM_ROTA').length, 0);
+    assert.deepEqual(
+      bombonas.filter((b: any) => ['BO-0023', 'BO-0024'].includes(b.codigo)).map((b: any) => b.status),
+      ['PATIO', 'PATIO'],
+    );
   });
 
   it('filtra por status', async () => {
     const patio = await (await fetch(`${api.url}/bombonas?status=PATIO`)).json();
-    assert.equal(patio.length, 5);
+    assert.equal(patio.length, 43);
   });
 
   it('detalha uma bombona com histórico e devolve 404 para código inexistente', async () => {
@@ -124,7 +127,8 @@ describe('API de consulta', () => {
   });
 
   it('cada cliente tem de 3 a 6 coletas com litros dentro da capacidade', () => {
-    const clientes = ctx.db.prepare('SELECT id FROM clientes').all() as any[];
+    // O cliente 50 não tem bombona (cliente para criar contrato ao vivo), logo não tem coletas.
+    const clientes = ctx.db.prepare('SELECT id FROM clientes WHERE id <= 49').all() as any[];
     const q = ctx.db.prepare(
       `SELECT m.litros, b.capacidade_l FROM movimentacoes m JOIN bombonas b ON b.id = m.bombona_id
        WHERE m.cliente_id = ? AND m.tipo = 'COLETA' AND m.litros IS NOT NULL`);
@@ -141,8 +145,9 @@ describe('API de consulta', () => {
 
   it('resume os indicadores', async () => {
     const ind = await (await fetch(`${api.url}/indicadores`)).json();
-    assert.equal(ind.total, 35);
-    assert.deepEqual(ind.porStatus, { PATIO: 5, EM_ROTA: 2, EM_CLIENTE: 28, EXTRAVIADA: 0 });
+    assert.equal(ind.total, 107);
+    // Ninguém nasce em rota: na versão com roteiros, bombona só viaja dentro do furgão.
+    assert.deepEqual(ind.porStatus, { PATIO: 43, EM_ROTA: 0, EM_CLIENTE: 64, EXTRAVIADA: 0 });
     assert.equal(ind.alertasAbertos, 0);
   });
 });

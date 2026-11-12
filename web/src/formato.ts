@@ -1,4 +1,4 @@
-import type { Severidade, Status, TipoAlerta } from './api.ts';
+import type { Frequencia, Severidade, Status, TipoAlerta } from './api.ts';
 
 export const rotuloStatus: Record<Status, string> = {
   PATIO: 'No pátio',
@@ -52,3 +52,27 @@ export const dataHora = (iso: string | null | undefined) =>
 export const moeda = (valor: number) => valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 
 export const numero = (valor: number) => valor.toLocaleString('pt-BR');
+
+export const nomeDia = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+/** "2026-11-09" → "seg, 09/11" (datas de operação são texto AAAA-MM-DD, em UTC). */
+export function formatarDataOperacao(data: string) {
+  const [, m, d] = data.split('-');
+  return `${nomeDia[new Date(`${data}T00:00:00Z`).getUTCDay()]}, ${d}/${m}`;
+}
+
+export const dataCurta = (data: string) => formatarDataOperacao(data).replace(',', '');
+
+export function rotuloFrequencia(c: { frequencia: Frequencia; diasSemana: number[]; diaMes: number | null }) {
+  const dias = c.diasSemana.map((d) => nomeDia[d]).join(', ');
+  switch (c.frequencia) {
+    case 'DIARIA':
+      return 'Diária';
+    case 'SEMANAL':
+      return `Semanal · ${dias}`;
+    case 'QUINZENAL':
+      return `Quinzenal · ${dias}`;
+    case 'MENSAL':
+      return `Mensal · dia ${c.diaMes}`;
+  }
+}

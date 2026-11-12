@@ -2,23 +2,29 @@ import { useState } from 'react';
 import { api, type Bombona, type Cenario } from '../api.ts';
 import { useMonitoramento } from '../monitoramento.tsx';
 
-/** Operações do dia a dia: entrega, coleta e recuperação. */
+/** Ações da bombona no painel: só a recuperação de uma extraviada. Entrega e coleta de rotina vêm dos roteiros. */
 export function AcoesBombona({ bombona: b }: { bombona: Bombona }) {
-  const { clientes, atualizarBombona } = useMonitoramento();
-  const [clienteId, setClienteId] = useState('');
+  const { atualizarBombona } = useMonitoramento();
   const [observacao, setObservacao] = useState('');
-  const [litros, setLitros] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const executar = async (acao: () => Promise<Bombona>) => {
+  if (b.status !== 'EXTRAVIADA') {
+    return (
+      <p className="suave">
+        {b.status === 'EM_ROTA'
+          ? 'A entrega e a chegada ao pátio são confirmadas automaticamente quando o rastreador entra na cerca do destino.'
+          : 'Entregas e coletas seguem os contratos: o furgão faz as trocas, veja a aba Coletas do dia.'}
+      </p>
+    );
+  }
+
+  const registrar = async () => {
     setEnviando(true);
     setErro(null);
     try {
-      atualizarBombona(await acao());
+      atualizarBombona(await api.coletar(b.codigo, { observacao }));
       setObservacao('');
-      setLitros('');
-      setClienteId('');
     } catch (e) {
       setErro((e as Error).message);
     } finally {
@@ -26,87 +32,26 @@ export function AcoesBombona({ bombona: b }: { bombona: Bombona }) {
     }
   };
 
-  if (b.status === 'EM_ROTA') {
-    return (
-      <p className="suave">
-        A {b.destino?.nome === 'Pátio Bio Óleo' ? 'chegada ao pátio' : 'entrega'} é confirmada automaticamente quando o rastreador
-        entrar na cerca do destino.
-      </p>
-    );
-  }
-
-  if (b.status === 'PATIO') {
-    return (
-      <form
-        className="acao"
-        onSubmit={(e) => {
-          e.preventDefault();
-          executar(() => api.entregar(b.codigo, Number(clienteId), observacao));
-        }}
-      >
-        <label className="acao__rotulo" htmlFor="cliente-destino">
-          Enviar para o cliente
-        </label>
-        <select id="cliente-destino" className="campo" value={clienteId} onChange={(e) => setClienteId(e.target.value)} required>
-          <option value="">Escolha o cliente…</option>
-          {[...clientes]
-            .sort((x, y) => x.nome.localeCompare(y.nome))
-            .map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nome} · {c.cidade}
-                {c.risco === 'ALTO' ? ' (risco alto)' : ''}
-              </option>
-            ))}
-        </select>
-        <button className="botao botao--primario" disabled={enviando || !clienteId}>
-          Registrar saída para entrega
-        </button>
-        {erro && <p className="erro">{erro}</p>}
-      </form>
-    );
-  }
-
-  const recuperacao = b.status === 'EXTRAVIADA';
   return (
     <form
       className="acao"
       onSubmit={(e) => {
         e.preventDefault();
-        executar(() => api.coletar(b.codigo, recuperacao ? { observacao } : { litros: Number(litros), observacao }));
+        registrar();
       }}
     >
-      <div className="acao__rotulo">{recuperacao ? 'Bombona encontrada? Registre a recuperação' : 'Coleta'}</div>
-      {!recuperacao && (
-        <>
-          <label className="acao__rotulo" htmlFor="litros-coleta">
-            Litros coletados
-          </label>
-          <input
-            id="litros-coleta"
-            className="campo"
-            type="number"
-            min={0}
-            max={b.capacidadeL}
-            step={1}
-            required
-            placeholder={`0 a ${b.capacidadeL}`}
-            value={litros}
-            onChange={(e) => setLitros(e.target.value)}
-          />
-        </>
-      )}
       <label className="acao__rotulo" htmlFor="obs-coleta">
-        {recuperacao ? 'Onde estava?' : 'Observação'}
+        Bombona encontrada? Registre a recuperação
       </label>
       <input
         id="obs-coleta"
         className="campo"
-        placeholder={recuperacao ? 'Onde estava? (ex.: ferro-velho da Av. Brasil)' : 'Observação (opcional)'}
+        placeholder="Onde estava? (ex.: ferro-velho da Av. Brasil)"
         value={observacao}
         onChange={(e) => setObservacao(e.target.value)}
       />
-      <button className={`botao ${recuperacao ? 'botao--perigo' : 'botao--primario'}`} disabled={enviando}>
-        {recuperacao ? 'Registrar recuperação' : 'Registrar coleta'}
+      <button className="botao botao--perigo" disabled={enviando}>
+        Registrar recuperação
       </button>
       {erro && <p className="erro">{erro}</p>}
     </form>

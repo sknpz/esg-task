@@ -42,3 +42,35 @@ export const iconePatio = L.divIcon({
   iconSize: [36, 36],
   iconAnchor: [18, 18],
 });
+
+/** Cor fixa por furgão (o número vai de 1 a 4). */
+export const CORES_FURGAO = ['#e4572e', '#3b8ea5', '#5f9b4a', '#9b5f98'];
+export const corDoFurgao = (numero: number) => CORES_FURGAO[(numero - 1) % CORES_FURGAO.length];
+
+const SVG_FURGAO = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6h12v9H2zM14 9h4l4 3.5V15h-8z" fill="currentColor"/><circle cx="7" cy="17" r="2" fill="currentColor" stroke="#fff" stroke-width="1.2"/><circle cx="18" cy="17" r="2" fill="currentColor" stroke="#fff" stroke-width="1.2"/></svg>`;
+
+const cacheFurgao = new Map<number, L.DivIcon>();
+
+export function iconeFurgao(numero: number) {
+  let icone = cacheFurgao.get(numero);
+  if (!icone) {
+    icone = L.divIcon({
+      className: '',
+      html: `<div class="pino-furgao" style="background:${corDoFurgao(numero)}">${SVG_FURGAO}<span>${numero}</span></div>`,
+      iconSize: [34, 34],
+      iconAnchor: [17, 17],
+    });
+    cacheFurgao.set(numero, icone);
+  }
+  return icone;
+}
+
+/** Pino numerado de uma parada; cinza quando já foi feita. */
+export function iconeParada(ordem: number, cor: string, feita: boolean) {
+  return L.divIcon({
+    className: '',
+    html: `<div class="pino-parada ${feita ? 'pino-parada--feita' : ''}" style="${feita ? '' : `background:${cor}`}">${ordem}</div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+}

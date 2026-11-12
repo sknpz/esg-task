@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import type { Contexto } from '../src/contexto.ts';
 import type { Evento } from '../src/eventos.ts';
-import { verificarSemSinal } from '../src/regras.ts';
+import { continuar, definirVelocidade, estadoOperacao, pausar } from '../src/operacao.ts';
+import { processarLeitura, verificarSemSinal } from '../src/regras.ts';
 import { criarContexto, subirApi } from './apoio.ts';
 
 type Ponto = { lat: number; lng: number };
@@ -132,6 +133,13 @@ describe('motor de regras', () => {
 
   it('bombona em rota não gera alerta e conclui a entrega ao chegar (RN13, RN04)', async () => {
     const c = await cenario();
+    // Saída manual do pátio para o cliente 3 (o seed não tem bombona em rota).
+    const saida = await fetch(`${c.api.url}/bombonas/BO-0023/entrega`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clienteId: 3 }),
+    });
+    assert.equal(saida.status, 200, await saida.clone().text());
     const emRota = await c.bombona('BO-0023');
     assert.equal(emRota.status, 'EM_ROTA');
     await c.enviar('BO-0023', aoNorte(emRota.destino, 5000));
@@ -157,7 +165,7 @@ describe('motor de regras', () => {
   it('abre SEM_SINAL na varredura e fecha quando chega leitura (RN10)', async () => {
     const c = await cenario();
     const abertos = verificarSemSinal(c.ctx, Date.now() + (c.ctx.config.semSinalSegundos + 5) * 1000);
-    assert.equal(abertos.length, 35);
+    assert.equal(abertos.length, 107);
     assert.equal(verificarSemSinal(c.ctx, Date.now() + 3_600_000).length, 0, 'não duplica');
     await c.enviar('BO-0004', await clienteDe(c, 'BO-0004'));
     assert.deepEqual(await c.abertos('BO-0004'), []);
@@ -196,5 +204,49 @@ describe('GET /api/eventos', () => {
     const { value } = await leitor.read();
     assert.match(new TextDecoder().decode(value), /^event: bombona\ndata: \{.*"codigo":"BO-0005"/);
     controle.abort();
+  });
+});
+
+describe('sem sinal e o player da simulação', () => {
+  it('pausado, a varredura não abre SEM_SINAL', () => {
+    const ctx = criarContexto({ semSinalSegundos: 45 });
+    estadoOperacao(ctx); // nasce pausado
+    ctx.db.prepare('UPDATE dispositivos SET ultimo_sinal = ?').run(new Date(Date.now() - 3_600_000).toISOString());
+    assert.equal(verificarSemSinal(ctx).length, 0);
+  });
+
+  it('em 2x o prazo de sem sinal cai pela metade', () => {
+    const ctx = criarContexto({ semSinalSegundos: 45 });
+    const agora = Date.now();
+    continuar(ctx, agora);
+    definirVelocidade(ctx, 2, agora);
+    ctx.db.prepare('UPDATE dispositivos SET ultimo_sinal = ?').run(new Date(agora).toISOString());
+    // um dispositivo calado há 30 s: fora do prazo em 2x (22,5 s), dentro em 1x
+    ctx.db
+      .prepare('UPDATE dispositivos SET ultimo_sinal = ? WHERE id = (SELECT MIN(id) FROM dispositivos)')
+      .run(new Date(agora - 30_000).toISOString());
+    assert.equal(verificarSemSinal(ctx, agora).length, 1);
+  });
+
+  it('continuar desloca o último sinal pelo tempo pausado', () => {
+    const ctx = criarContexto();
+    continuar(ctx, 1_000_000);
+    pausar(ctx, 2_000_000);
+    ctx.db.prepare('UPDATE dispositivos SET ultimo_sinal = ?').run(new Date(1_990_000).toISOString());
+    continuar(ctx, 2_060_000); // 60 s pausado
+    const { ultimo_sinal } = ctx.db.prepare('SELECT ultimo_sinal FROM dispositivos LIMIT 1').get() as { ultimo_sinal: string };
+    assert.equal(Date.parse(ultimo_sinal), 2_050_000);
+  });
+
+  it('quem reportou durante a pausa não vai para o futuro e a leitura seguinte não é atrasada', () => {
+    const ctx = criarContexto();
+    continuar(ctx, 1_000_000);
+    pausar(ctx, 2_000_000);
+    ctx.db.prepare('UPDATE dispositivos SET ultimo_sinal = ?').run(new Date(2_055_000).toISOString());
+    continuar(ctx, 2_060_000);
+    const { id, ultimo_sinal } = ctx.db.prepare('SELECT id, ultimo_sinal FROM dispositivos LIMIT 1').get() as { id: string; ultimo_sinal: string };
+    assert.equal(Date.parse(ultimo_sinal), 2_060_000);
+    const r = processarLeitura(ctx, id, { lat: -23.4, lng: -51.9, precisao: 5, bateria: 90, registradoEm: new Date(2_061_000).toISOString() });
+    assert.equal(r.atrasada, false);
   });
 });

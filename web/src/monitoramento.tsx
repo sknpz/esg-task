@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, type Alerta, type Bombona, type Cliente, type Configuracao, type Indicadores } from './api.ts';
+import { api, type Alerta, type Bombona, type Cliente, type Configuracao, type Indicadores, type Operacao, type Roteiro } from './api.ts';
 import { rotuloAlerta } from './formato.ts';
 
 /** Notificação na tela: alerta novo ou etapa concluída (como o push "pedido entregue"). */
@@ -28,6 +28,8 @@ type Monitoramento = {
   clientes: Cliente[];
   alertasAbertos: Alerta[];
   indicadores: Indicadores | null;
+  operacao: Operacao | null;
+  roteiros: Roteiro[];
   avisos: Aviso[];
   agora: number;
   dispensarAviso: (id: string) => void;
@@ -66,6 +68,8 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [alertasAbertos, setAlertasAbertos] = useState<Alerta[]>([]);
   const [indicadores, setIndicadores] = useState<Indicadores | null>(null);
+  const [operacao, setOperacao] = useState<Operacao | null>(null);
+  const [roteiros, setRoteiros] = useState<Roteiro[]>([]);
   const [avisos, setAvisos] = useState<Aviso[]>([]);
   const [agora, setAgora] = useState(Date.now());
 
@@ -73,6 +77,8 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
   // Cópia para o ouvinte de eventos comparar o antes e o depois sem se reinscrever a cada mudança.
   const bombonasRef = useRef(bombonas);
   bombonasRef.current = bombonas;
+  // Depois do reset, até o recarregar terminar o que há em `bombonas` é da rodada anterior: sem base para comparar etapas.
+  const semBase = useRef(false);
 
   const mostrarAviso = useCallback((aviso: Aviso) => {
     setAvisos((atual) => [...atual.slice(-3), aviso]);
@@ -95,13 +101,22 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
   }, []);
   const aplicarPendentesAgrupado = useAgrupado(aplicarPendentes, 100);
 
+  // Furgões do dia: só os da data corrente da operação. Chamado a cada evento 'operacao', porque um roteiro
+  // apagado na saída não emite evento próprio.
+  const recarregarRoteiros = useCallback(async (data?: string) => {
+    const dia = await api.roteiros(data);
+    setRoteiros(dia.roteiros);
+  }, []);
+
   const recarregar = useCallback(async () => {
-    const [cfg, lista] = await Promise.all([api.configuracao(), api.bombonas()]);
+    const [cfg, lista, op] = await Promise.all([api.configuracao(), api.bombonas(), api.operacao()]);
     setConfig(cfg);
+    setOperacao(op);
+    recarregarRoteiros(op.data).catch(() => {});
     setBombonas(Object.fromEntries(lista.map((b) => [b.codigo, b])));
     recarregarResumo();
     setCarregado(true);
-  }, [recarregarResumo]);
+  }, [recarregarResumo, recarregarRoteiros]);
 
   useEffect(() => {
     recarregar().catch(() => setCarregado(true));
@@ -121,7 +136,7 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
     fonte.onerror = () => setConectado(false);
     fonte.addEventListener('bombona', (e) => {
       const bombona: Bombona = JSON.parse((e as MessageEvent).data);
-      const etapa = etapaConcluida(pendentes.current[bombona.codigo] ?? bombonasRef.current[bombona.codigo], bombona);
+      const etapa = semBase.current ? null : etapaConcluida(pendentes.current[bombona.codigo] ?? bombonasRef.current[bombona.codigo], bombona);
       if (etapa) mostrarAviso({ id: `etapa-${bombona.codigo}-${Date.now()}`, tom: 'ETAPA', bombona: bombona.codigo, ...etapa });
       pendentes.current[bombona.codigo] = bombona;
       aplicarPendentesAgrupado();
@@ -140,8 +155,39 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
         });
       }
     });
+    fonte.addEventListener('operacao', (e) => {
+      const op: Operacao = JSON.parse((e as MessageEvent).data);
+      setOperacao(op);
+      recarregarRoteiros(op.data).catch(() => {});
+    });
+    // O reset apaga coletas, alertas e roteiros sem emitir eventos deles: tudo recomeça do zero.
+    fonte.addEventListener('reset', () => {
+      pendentes.current = {};
+      semBase.current = true;
+      setBombonas({});
+      setAvisos([]);
+      setRoteiros([]);
+      setAlertasAbertos([]);
+      recarregar()
+        .catch(() => {})
+        .finally(() => {
+          semBase.current = false;
+        });
+    });
+    fonte.addEventListener('roteiro', (e) => {
+      const roteiro: Roteiro = JSON.parse((e as MessageEvent).data);
+      setRoteiros((atual) =>
+        atual.some((r) => r.id === roteiro.id)
+          ? atual.map((r) => (r.id === roteiro.id ? roteiro : r))
+          : [...atual, roteiro].sort((a, b) => a.numero - b.numero),
+      );
+    });
+    fonte.addEventListener('furgao', (e) => {
+      const { roteiroId, lat, lng }: { roteiroId: number; lat: number; lng: number } = JSON.parse((e as MessageEvent).data);
+      setRoteiros((atual) => atual.map((r) => (r.id === roteiroId ? { ...r, posicao: { lat, lng } } : r)));
+    });
     return () => fonte.close();
-  }, [aplicarPendentesAgrupado, recarregar, recarregarResumoAgrupado, mostrarAviso]);
+  }, [aplicarPendentesAgrupado, recarregar, recarregarResumoAgrupado, recarregarRoteiros, mostrarAviso]);
 
   const dispensarAviso = useCallback((id: string) => setAvisos((atual) => atual.filter((a) => a.id !== id)), []);
 
@@ -154,13 +200,15 @@ export function ProvedorDeMonitoramento({ children }: { children: ReactNode }) {
       clientes,
       alertasAbertos,
       indicadores,
+      operacao,
+      roteiros,
       avisos,
       agora,
       dispensarAviso,
       atualizarBombona,
       recarregar: () => void recarregar(),
     }),
-    [carregado, conectado, config, bombonas, clientes, alertasAbertos, indicadores, avisos, agora, dispensarAviso, atualizarBombona, recarregar],
+    [carregado, conectado, config, bombonas, clientes, alertasAbertos, indicadores, operacao, roteiros, avisos, agora, dispensarAviso, atualizarBombona, recarregar],
   );
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;

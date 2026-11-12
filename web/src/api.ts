@@ -1,7 +1,7 @@
 export type Status = 'PATIO' | 'EM_ROTA' | 'EM_CLIENTE' | 'EXTRAVIADA';
 export type TipoAlerta = 'FORA_DA_AREA' | 'EXTRAVIO' | 'SEM_SINAL' | 'BATERIA_BAIXA' | 'COLETA_ABAIXO';
 export type Severidade = 'INFO' | 'AVISO' | 'CRITICO';
-export type Cenario = 'VENDA' | 'DEVOLUCAO' | 'SEM_SINAL' | 'BATERIA_FRACA';
+export type Cenario = 'VENDA' | 'DEVOLUCAO' | 'SEM_SINAL' | 'BATERIA_FRACA' | 'VENDA_SILENCIOSA';
 
 export type Ponto = { lat: number; lng: number };
 export type Local = Ponto & { nome: string; raioM: number };
@@ -57,6 +57,9 @@ export type Cliente = {
   incidentes: number;
   ultimoIncidente: string | null;
   risco: 'BAIXO' | 'MEDIO' | 'ALTO';
+  contratoAtivo: boolean;
+  /** Frequência do contrato ativo; null sem contrato ativo. */
+  modalidade: Frequencia | null;
 };
 
 export type Indicadores = {
@@ -74,6 +77,88 @@ export type Configuracao = {
   semSinalSegundos: number;
   bateriaMinima: number;
 };
+
+export type Fase = 'MANHA' | 'ROTAS' | 'FIM';
+export type Velocidade = 1 | 2;
+/** Ritmo dos furgões: REAL (80 km/h de verdade) ou DEMO (cada roteiro em ~90 s). */
+export type Modo = 'REAL' | 'DEMO';
+export type Operacao = {
+  data: string;
+  diaSemana: number;
+  fase: Fase;
+  pausado: boolean;
+  velocidade: Velocidade;
+  modo: Modo;
+  rodada: number;
+  dia: number;
+  faseDesde: string;
+  /** Já dividida pela velocidade; null enquanto os furgões estão na rua. */
+  faseDuracaoMs: number | null;
+};
+
+export type Frequencia = 'DIARIA' | 'SEMANAL' | 'QUINZENAL' | 'MENSAL';
+export type Contrato = {
+  id: number;
+  clienteId: number;
+  cliente: { nome: string; cidade: string };
+  quantidade: number;
+  frequencia: Frequencia;
+  diasSemana: number[];
+  diaMes: number | null;
+  inicio: string;
+  situacao: 'ATIVO' | 'ENCERRADO';
+  proximas: string[];
+};
+/** Cliente digitado no "Novo contrato": nasce junto com o contrato (cerca de 150 m, até 250 km do pátio). */
+export type NovoClienteEntrada = { nome: string; tipo: string; cidade: string; endereco: string; lat: number; lng: number };
+
+/** Um dos dois: `clienteId` (cliente já cadastrado) ou `novoCliente`. */
+export type EntradaContrato = {
+  clienteId?: number;
+  novoCliente?: NovoClienteEntrada;
+  quantidade: number;
+  frequencia: Frequencia;
+  diasSemana: number[];
+  diaMes: number | null;
+  inicio: string;
+  situacao?: 'ATIVO' | 'ENCERRADO';
+};
+
+export type MotivoParada = 'COLETA' | 'RETIRADA';
+export type StatusParada = 'PENDENTE' | 'FEITA' | 'NAO_ATENDIDA';
+export type StatusRoteiro = 'PLANEJADO' | 'EM_ANDAMENTO' | 'CONCLUIDO';
+
+export type ResultadoParada = {
+  deixadas: string[];
+  levadas: { codigo: string; litros: number }[];
+  naoEncontradas: { codigo: string; incidente: boolean }[];
+  observacao?: string;
+};
+
+export type Parada = {
+  id: number;
+  ordem: number | null;
+  cliente: { id: number; nome: string; cidade: string; lat: number; lng: number };
+  motivo: MotivoParada;
+  vazias: number;
+  demanda: number;
+  status: StatusParada;
+  resultado: ResultadoParada | null;
+};
+
+export type Roteiro = {
+  id: number;
+  numero: number;
+  status: StatusRoteiro;
+  distanciaM: number | null;
+  trajeto: [number, number][] | null;
+  posicao: Ponto | null;
+  capacidade: number;
+  carga: number;
+  paradas: Parada[];
+};
+
+export type RoteirosDoDia = { data: string; roteiros: Roteiro[]; naoAtendidas: Parada[] };
 
 async function requisitar<T>(caminho: string, init?: RequestInit): Promise<T> {
   const resposta = await fetch(`/api${caminho}`, {
@@ -100,5 +185,17 @@ export const api = {
   coletar: (codigo: string, entrada: { litros?: number; observacao?: string }) =>
     enviar<Bombona>(`/bombonas/${codigo}/coleta`, entrada),
   resolverAlerta: (id: number, observacao: string) => enviar<Alerta>(`/alertas/${id}/resolver`, { observacao }),
-  simular: (bombona: string, tipo: Cenario) => enviar<unknown>('/simulacao/comandos', { bombona, tipo }),
+  simular: (bombona: string | null, tipo: Cenario) =>
+    enviar<unknown>('/simulacao/comandos', bombona === null ? { tipo } : { bombona, tipo }),
+  operacao: () => requisitar<Operacao>('/operacao'),
+  pausar: () => enviar<Operacao>('/operacao/pausar', {}),
+  continuar: () => enviar<Operacao>('/operacao/continuar', {}),
+  velocidade: (velocidade: Velocidade) => enviar<Operacao>('/operacao/velocidade', { velocidade }),
+  modo: (modo: Modo) => enviar<Operacao>('/operacao/modo', { modo }),
+  resetar: () => enviar<Operacao>('/operacao/reset', {}),
+  contratos: () => requisitar<Contrato[]>('/contratos'),
+  criarContrato: (e: EntradaContrato) => enviar<Contrato>('/contratos', e),
+  editarContrato: (id: number, e: EntradaContrato) =>
+    requisitar<Contrato>(`/contratos/${id}`, { method: 'PUT', body: JSON.stringify(e) }),
+  roteiros: (data?: string) => requisitar<RoteirosDoDia>(`/roteiros${data ? `?data=${data}` : ''}`),
 };

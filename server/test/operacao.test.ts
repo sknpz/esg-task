@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
+import { avancarOperacao, continuar, definirModo, definirVelocidade, estadoOperacao } from '../src/operacao.ts';
 import { criarContexto, subirApi } from './apoio.ts';
 
 const ctx = criarContexto();
@@ -131,12 +132,88 @@ describe('canal de simulação (demo)', () => {
     assert.equal((await post('/simulacao/comandos', { bombona: 'BO-0010', tipo: 'VENDA' })).status, 201);
 
     const estado = await get('/simulacao/estado', auth);
-    assert.equal(estado.dispositivos.length, 35);
+    assert.equal(estado.dispositivos.length, 107);
     const d = estado.dispositivos.find((x: any) => x.bombona === 'BO-0010');
     assert.equal(d.token, token('BO-0010'));
     assert.ok(d.alvo.nome);
     assert.deepEqual(estado.comandos.map((c: any) => [c.bombona, c.tipo]), [['BO-0010', 'VENDA']]);
 
     assert.deepEqual((await get('/simulacao/estado', auth)).comandos, []);
+  });
+});
+
+describe('relógio da operação: pausa, velocidade, rodada', () => {
+  it('banco novo nasce pausado, em 1x, rodada 1, dia 1', () => {
+    const c = criarContexto();
+    const e = estadoOperacao(c);
+    assert.equal(e.pausado, true);
+    assert.equal(e.velocidade, 1);
+    assert.equal(e.rodada, 1);
+    assert.equal(e.dia, 1);
+    assert.equal(e.fase, 'MANHA');
+  });
+
+  it('banco novo nasce em tempo real', () => {
+    assert.equal(estadoOperacao(criarContexto()).modo, 'REAL');
+  });
+
+  it('definirModo grava, emite operacao e não mexe em fase_desde', () => {
+    const c = criarContexto();
+    const antes = estadoOperacao(c).faseDesde;
+    const vistos: Array<{ tipo: string }> = [];
+    c.eventos.ouvir((e) => vistos.push(e));
+    const e = definirModo(c, 'DEMO');
+    assert.equal(e.modo, 'DEMO');
+    assert.equal(estadoOperacao(c).modo, 'DEMO');
+    assert.equal(e.faseDesde, antes);
+    assert.ok(vistos.some((v) => v.tipo === 'operacao'));
+  });
+
+  it('POST /operacao/modo aceita REAL e DEMO e recusa o resto', async () => {
+    const demo = await post('/operacao/modo', { modo: 'DEMO' });
+    assert.equal(demo.status, 200);
+    assert.equal(demo.corpo.modo, 'DEMO');
+    assert.equal((await get('/simulacao/estado', { Authorization: `Bearer ${ctx.config.tokenSimulador}` })).operacao.modo, 'DEMO');
+    assert.equal((await post('/operacao/modo', { modo: 'RAPIDO' })).status, 400);
+    assert.equal((await post('/operacao/modo', {})).status, 400);
+    assert.equal((await post('/operacao/modo', { modo: 'REAL' })).corpo.modo, 'REAL');
+  });
+
+  it('pausado na criação, a manhã não avança', () => {
+    const c = criarContexto({ fasePausaS: 5 });
+    const t0 = Date.parse(estadoOperacao(c).faseDesde);
+    avancarOperacao(c, t0 + 60_000);
+    assert.equal(estadoOperacao(c).fase, 'MANHA');
+  });
+
+  it('em 2x a manhã dura metade', () => {
+    const c = criarContexto({ fasePausaS: 10 });
+    continuar(c);
+    definirVelocidade(c, 2);
+    const t0 = Date.parse(estadoOperacao(c).faseDesde);
+    assert.equal(estadoOperacao(c).faseDuracaoMs, 5000);
+    avancarOperacao(c, t0 + 4900);
+    assert.equal(estadoOperacao(c).fase, 'MANHA');
+    avancarOperacao(c, t0 + 5100);
+    assert.equal(estadoOperacao(c).fase, 'ROTAS');
+  });
+
+  it('trocar a velocidade no meio da fase mantém a fração decorrida', () => {
+    const c = criarContexto({ fasePausaS: 10 });
+    continuar(c, 1_000_000);
+    c.db.prepare('UPDATE operacao SET fase_desde = ?').run(new Date(1_000_000).toISOString());
+    definirVelocidade(c, 2, 1_004_000); // 40% de 10 s em 1x
+    assert.equal(Date.parse(estadoOperacao(c).faseDesde), 1_002_000); // 40% de 5 s em 2x
+  });
+
+  it('POST /operacao/velocidade aceita 1 e 2 e recusa o resto', async () => {
+    const dois = await post('/operacao/velocidade', { velocidade: 2 });
+    assert.equal(dois.status, 200);
+    assert.equal(dois.corpo.velocidade, 2);
+    assert.equal((await get('/simulacao/estado', { Authorization: `Bearer ${ctx.config.tokenSimulador}` })).operacao.velocidade, 2);
+    assert.equal((await post('/operacao/velocidade', { velocidade: 3 })).status, 400);
+    const texto = await post('/operacao/velocidade', { velocidade: '2' });
+    assert.equal(texto.status, 400);
+    assert.ok(texto.corpo.erro);
   });
 });
