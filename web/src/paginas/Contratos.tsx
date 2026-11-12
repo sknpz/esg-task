@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api, type Contrato, type EntradaContrato, type Frequencia } from '../api.ts';
+import { aplicarDiaDoInicio } from '../diaDoContrato.ts';
 import { dataCurta, nomeDia, rotuloFrequencia } from '../formato.ts';
 import { useMonitoramento } from '../monitoramento.tsx';
 
@@ -64,7 +65,8 @@ export function Contratos() {
 
   const abrirNovo = () => {
     setEditando('novo');
-    setForm({ ...vazio(operacao?.data ?? ''), clienteId: semContrato[0]?.id ?? null });
+    // Já vem com o dia do Início marcado (semanal, o dia da semana de hoje).
+    setForm(aplicarDiaDoInicio({ ...vazio(operacao?.data ?? ''), clienteId: semContrato[0]?.id ?? null }));
     setErro(null);
   };
   const abrirEdicao = (c: Contrato) => {
@@ -79,8 +81,9 @@ export function Contratos() {
 
   const mudar = (parte: Partial<Formulario>) => setForm((f) => ({ ...f, ...parte }));
 
-  const mudarFrequencia = (frequencia: Frequencia) =>
-    mudar({ frequencia, diasSemana: frequencia === 'QUINZENAL' ? form.diasSemana.slice(0, 1) : form.diasSemana });
+  // Escolher a frequência ou mudar o Início marca o dia do Início; depois o operador ajusta à mão se quiser.
+  const mudarFrequencia = (frequencia: Frequencia) => setForm((f) => aplicarDiaDoInicio({ ...f, frequencia }));
+  const mudarInicio = (inicio: string) => setForm((f) => aplicarDiaDoInicio({ ...f, inicio }));
 
   const alternarDia = (dia: number) => {
     if (form.frequencia === 'QUINZENAL') return mudar({ diasSemana: [dia] });
@@ -243,7 +246,7 @@ export function Contratos() {
 
             <label className="contrato-form__campo">
               <span>Início</span>
-              <input className="campo" type="date" value={form.inicio} onChange={(e) => mudar({ inicio: e.target.value })} />
+              <input className="campo" type="date" value={form.inicio} onChange={(e) => mudarInicio(e.target.value)} />
             </label>
 
             <p className="suave pequeno">
