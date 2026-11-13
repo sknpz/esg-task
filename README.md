@@ -3,6 +3,9 @@
 Protótipo **hipotético** de um sistema para rastrear as bombonas que a Bio Óleo (Cianorte-PR) deixa nos
 clientes para coletar óleo de cozinha usado.
 
+**Demonstração no ar: https://biooleo-esg.onrender.com**. Está no plano gratuito, então a primeira visita depois de
+um tempo parado leva até ~1 min para acordar. Os furgões só saem depois que se aperta ▶ no player.
+
 ## Como abrir (rápido)
 
 > Vale também para quem pede a um agente de IA (Claude, Codex etc.) "abre o projeto no navegador".
