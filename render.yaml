@@ -1,0 +1,17 @@
+# Deploy no Render: API + painel compilado + simulador num único serviço Node.
+# A Vercel não serve: o servidor precisa ficar de pé (relógio da operação, SSE, SQLite em disco).
+services:
+  - type: web
+    name: biooleo-esg
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:demo
+    healthCheckPath: /api/bombonas
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: PORT
+        value: "3333"
+      - key: API_URL
+        value: http://localhost:3333/api
