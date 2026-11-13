@@ -118,6 +118,15 @@ npm start          # API + painel em http://localhost:3333
 npm run simular    # em outro terminal
 ```
 
+`npm run start:demo` sobe os dois juntos (API + simulador) num processo só.
+
+### Deploy
+
+A demonstração precisa de um processo Node sempre de pé (relógio da operação, SSE e SQLite em disco), então
+**não roda na Vercel** (lá só o painel estático sobe e a API responde 404). Use um host de Node contínuo, como o
+[Render](https://render.com): o `render.yaml` da raiz já configura o serviço (New → Blueprint → este repositório).
+No plano gratuito o serviço hiberna sem acesso e o banco volta ao seed a cada deploy, o que basta para a demonstração.
+
 Outros comandos:
 
 ```bash

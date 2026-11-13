@@ -13,7 +13,8 @@
     "start": "npm start -w server",
     "simular": "npm start -w simulator",
     "test": "npm test -w server -w simulator -w web",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "start:demo": "concurrently -n api,sim -c green,yellow \"npm start\" \"npm run simular\""
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
